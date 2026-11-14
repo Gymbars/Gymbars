@@ -9,7 +9,7 @@
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,400..800&display=swap" rel="stylesheet">
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet">
 
   <?!= include('Styles') ?>
@@ -51,11 +51,22 @@
         colorDomingo: '--color-sunday',
         colorContacto: '--color-contact'
       };
+      // Valores por defecto del diseño anterior (claro, Roboto). Si la hoja todavía
+      // los tiene guardados se ignoran para que se vea la paleta nueva; cualquier
+      // color distinto que se elija en el panel sí se aplica.
+      const LEGACY_THEME = {
+        colorNavbar: '#000000', colorFondo: '#ffffff', colorSeccion: '#f8f9fa',
+        colorTexto: '#212529', colorTextoClaro: '#f8f9fa', colorAcento: '#0e0e53',
+        colorSabado: '#323232', colorDomingo: '#960000', colorContacto: '#343a40'
+      };
       Object.keys(map).forEach(key => {
-        if (site[key]) root.setProperty(map[key], site[key]);
+        const value = site[key];
+        if (!value) return;
+        if (String(value).trim().toLowerCase() === LEGACY_THEME[key]) return;
+        root.setProperty(map[key], value);
       });
 
-      if (site.tipografia) {
+      if (site.tipografia && String(site.tipografia).trim().toLowerCase() !== 'roboto') {
         const family = String(site.tipografia).replace(/[^A-Za-z0-9 ]/g, '').trim();
 
         if (family) {

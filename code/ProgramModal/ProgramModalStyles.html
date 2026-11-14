@@ -22,7 +22,7 @@
   .program-modal-backdrop {
     position: absolute;
     inset: 0;
-    background: rgba(0, 0, 0, 0.55);
+    background: rgba(7, 8, 10, 0.82);
     opacity: 0;
     transition: opacity 0.22s ease;
   }
@@ -37,9 +37,11 @@
     width: min(720px, 100%);
     max-height: min(90vh, 860px);
     overflow-y: auto;
-    background: #fff;
-    border-radius: 6px;
-    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+    background: var(--color-section);
+    color: var(--color-text);
+    border-top: 3px solid var(--color-accent);
+    border-radius: 0;
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
     opacity: 0;
     transform: translateY(14px) scale(0.99);
     transition: opacity 0.22s ease, transform 0.22s ease;
@@ -61,9 +63,10 @@
     align-items: center;
     justify-content: center;
     font-size: 16px;
-    color: #fff;
-    background: rgba(0, 0, 0, 0.45);
-    border-radius: 50%;
+    color: var(--color-text);
+    background: rgba(11, 12, 14, 0.7);
+    box-shadow: inset 0 0 0 1px var(--chalk-line);
+    border-radius: 0;
     transition: background-color 0.2s ease;
   }
 
@@ -72,8 +75,7 @@
   }
 
   .program-modal-media {
-    height: 220px;
-    border-radius: 6px 6px 0 0;
+    height: 240px;
   }
 
   .program-modal-body {
@@ -81,9 +83,12 @@
   }
 
   .program-modal-title {
-    font-size: 28px;
-    font-weight: 500;
-    margin-bottom: 18px;
+    font-size: 48px;
+    font-weight: 800;
+    font-stretch: 75%;
+    line-height: 0.95;
+    text-transform: uppercase;
+    margin-bottom: 24px;
   }
 
   .program-modal-section + .program-modal-section {
@@ -126,7 +131,8 @@
     font-size: 12px;
     font-weight: 700;
     border-radius: 50%;
-    background: rgba(14, 14, 83, 0.08);
+    background: transparent;
+    box-shadow: inset 0 0 0 1px var(--color-accent);
     color: var(--color-accent);
     counter-increment: exercise;
     content: counter(exercise);
@@ -138,7 +144,7 @@
 
   .program-modal-list--notes li {
     padding-left: 24px;
-    color: rgba(33, 37, 41, 0.75);
+    color: var(--chalk-muted);
   }
 
   .program-modal-list--notes li::before {
@@ -159,7 +165,6 @@
     .program-modal-panel {
       width: 100%;
       max-height: 92vh;
-      border-radius: 10px 10px 0 0;
     }
 
     .program-modal-media {
