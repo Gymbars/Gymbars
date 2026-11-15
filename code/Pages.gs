@@ -210,6 +210,30 @@ function gbEvaluationPage_(member, recordId) {
 // ===  Carnet con QR  ========================================
 // ============================================================
 
+/** Enlaces del miembro a sus propios reportes (solo lectura; los enlaces van firmados). */
+function gbCarnetReports_(member) {
+  function latest(key, dateField) {
+    var rows = gbList_(key, function (r) { return r.MemberID === member.MemberID; });
+    rows.sort(function (a, b) { return String(gbFmtDate_(b[dateField])).localeCompare(String(gbFmtDate_(a[dateField]))); });
+    return rows[0] || null;
+  }
+  var items = [];
+  try {
+    var meas = latest('measurements', 'Fecha');
+    if (meas) items.push(['Mis medidas', 'Evolución de peso y medidas · ' + gbHumanDate_(gbFmtDate_(meas.Fecha)), gbReportLink_('medidas', member.MemberID, meas.MedidaID)]);
+    var ev = latest('evaluations', 'Fecha');
+    if (ev) items.push(['Mi evaluación física', 'Último resultado por nivel · ' + gbHumanDate_(gbFmtDate_(ev.Fecha)), gbReportLink_('evaluacion', member.MemberID, ev.EvalID)]);
+    var pay = latest('payments', 'Fecha');
+    if (pay && pay.ComprobanteToken) items.push(['Mi último comprobante', 'Pago del ' + gbHumanDate_(gbFmtDate_(pay.Fecha)), gbVoucherLink_(pay)]);
+  } catch (_) { return ''; }          // si algo falla, el carnet igual se muestra
+  items = items.filter(function (i) { return i[2]; });
+  if (!items.length) return '';
+  return '<div class="card"><b>Mis reportes</b>' + items.map(function (i) {
+    return '<a class="row" style="text-decoration:none;color:inherit" href="' + gbEsc_(i[2]) + '"><span>' + gbEsc_(i[0]) +
+      '<br><small class="muted">' + gbEsc_(i[1]) + '</small></span><b>Ver ›</b></a>';
+  }).join('') + '</div>';
+}
+
 function gbCarnetPage_(token) {
   if (gbPublicBlocked_()) return gbBlockedPage_();
   token = String(token || '');
@@ -229,10 +253,11 @@ function gbCarnetPage_(token) {
     '<div class="qrbox"><img id="qrimg" alt="Código QR de asistencia" width="300" height="300"></div>' +
     '<div class="card"><div class="row"><span>Mensualidad</span><b class="' + cls + '">' + gbEsc_(status.label) + '</b></div>' +
     (status.nextDue ? '<div class="row"><span>Próximo pago</span><b>' + gbEsc_(gbHumanDate_(status.nextDue)) + '</b></div>' : '') + '</div>' +
+    gbCarnetReports_(member) +
     (wallet ? '<a class="btn" href="' + gbEsc_(wallet) + '" target="_blank" rel="noopener">Agregar a Google Wallet</a>' : '') +
     '<a class="btn ghost" id="dl" href="#" download="carnet-gymbars.png">Descargar mi QR</a>' +
     '<div class="card muted" style="font-size:14px"><b style="color:var(--text)">Cómo usarlo</b><br>' +
-    'Muestra este código en el tablet de la entrada para registrar tu asistencia. ' +
+    'Muestra este código en el tablet de la entrada para registrar tu asistencia. Si lo escaneas con la cámara de tu teléfono, abre esta misma página. ' +
     'Guárdalo en tu teléfono: mantén presionado el QR y elige guardar imagen.</div>' +
     // Solo se muestra en iPhone: Apple permite crear un pase desde una imagen (iPhone 15 Pro o posterior).
     '<div class="card muted" id="apple-tip" style="font-size:14px" hidden><b style="color:var(--text)">En tu iPhone</b><br>' +

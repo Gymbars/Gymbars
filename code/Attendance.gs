@@ -17,14 +17,21 @@
 // ===  QR y utilidades  ======================================
 // ============================================================
 
-/** Texto que va dentro del QR del miembro. */
+/**
+ * Texto que va dentro del QR del miembro: su enlace personal (así la cámara del teléfono abre su página
+ * y el escáner del gimnasio registra la asistencia). Sin dirección configurada se usa el formato corto "GB1:".
+ */
 function gbQrText_(token) {
-  return 'GB1:' + token;
+  var base = '';
+  try { base = gbBaseUrl_(); } catch (_) {}
+  return base ? base + '?carnet=' + encodeURIComponent(token) : 'GB1:' + token;
 }
 
-/** Extrae el token de un texto de QR ('' si no tiene el formato esperado). */
+/** Extrae el token de un texto de QR: acepta el enlace personal y el formato corto "GB1:" ('' si no es ninguno). */
 function gbParseQr_(text) {
-  var m = String(text == null ? '' : text).trim().match(/^GB1:([0-9a-fA-F]{24})$/);
+  var value = String(text == null ? '' : text).trim();
+  var m = value.match(/^GB1:([0-9a-fA-F]{24})$/) ||
+          value.match(/^(?:https:\/\/[^\s?#]+|http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?[^\s?#]*)\?carnet=([0-9a-fA-F]{24})$/);
   return m ? m[1].toLowerCase() : '';
 }
 

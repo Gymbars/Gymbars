@@ -208,3 +208,14 @@ test('enlaces: la página usa el módulo, no admite configuración ajena y no se
   for (const needle of ['../link-core.js', '../config.js', 'buildTarget(location.search', 'noindex', 'no-referrer']) assert.ok(html.includes(needle), needle);
   assert.ok(!/location\.(href|hash)\s*=|window\.open|document\.write/.test(html), 'sin redirecciones libres');
 });
+
+
+test('qr: el enlace personal del carnet se reconoce y se convierte al formato corto', () => {
+  const token = 'ab12'.repeat(6);
+  const url = 'https://script.google.com/macros/s/AKfy123/exec?carnet=' + token;
+  assert.equal(core.parseQr(url), 'GB1:' + token);
+  assert.equal(core.parseQr('https://app.midominio.com/v/?carnet=' + token), 'GB1:' + token);
+  for (const bad of ['http://x.co/?carnet=' + token, url + '&x=1', url + ' mas', 'https://x.co/?carnet=' + token.slice(2), 'https://x.co/#?carnet=' + token]) {
+    assert.equal(core.parseQr(bad), '', bad);
+  }
+});

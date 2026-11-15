@@ -262,7 +262,11 @@ test('páginas: boleta, reporte de medidas y carnet muestran lo correcto y nunca
   assert.ok(!report.includes(dpi));
 
   const carnet = h.ctx.gbCarnetPage_(m.TokenQR).html;
-  assert.ok(carnet.includes('GB1:' + m.TokenQR));
+  assert.ok(carnet.includes(JSON.stringify(h.ctx.gbQrText_(m.TokenQR))), 'el QR lleva el enlace personal');
+  assert.equal(h.ctx.gbQrText_(m.TokenQR), BASE + '?carnet=' + m.TokenQR);
+  assert.match(carnet, /Mis reportes/);
+  assert.match(carnet, /Mis medidas/);
+  assert.ok(carnet.includes('reporte=medidas'), 'enlace firmado a su reporte de medidas');
   assert.ok(!carnet.includes(dpi));
   assert.ok(!carnet.includes(String(m.Telefono)));
 });
@@ -598,7 +602,7 @@ test('wallet: sin configuración no hay enlace; con configuración el JWT está 
   assert.equal(h.ctx.gbWalletSaveUrl_(m), '');
   const info = h.plain(h.coach('wallet.carnet', m.MemberID));
   assert.equal(info.walletConfigurado, false);
-  assert.equal(info.qrTexto, 'GB1:' + m.TokenQR);
+  assert.equal(info.qrTexto, BASE + '?carnet=' + m.TokenQR);
   assert.ok(info.enlace.startsWith(BASE + '?carnet='));
 
   const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
@@ -618,7 +622,7 @@ test('wallet: sin configuración no hay enlace; con configuración el JWT está 
   assert.equal(claims.typ, 'savetowallet');
   const obj = claims.payload.genericObjects[0];
   assert.equal(obj.barcode.type, 'QR_CODE');
-  assert.equal(obj.barcode.value, 'GB1:' + m.TokenQR);
+  assert.equal(obj.barcode.value, BASE + '?carnet=' + m.TokenQR);
   assert.equal(obj.header.defaultValue.value, 'Ana Gómez');
   assert.ok(obj.id.startsWith('3388000000012345.'));
   assert.equal(claims.payload.genericClasses[0].id, '3388000000012345.gymbars_member');
@@ -822,4 +826,20 @@ test('doGet: la prueba de cámara es pública, el resto sigue como antes', () =>
   const src = readFileSync(new URL('../../code/Code.gs', import.meta.url), 'utf8');
   assert.match(src, /e\.parameter\.page === 'camera'\) return gbCameraTestPage_\(\)/);
   assert.ok(src.indexOf("page === 'camera'") < src.indexOf("page === 'admin'"), 'se evalúa antes del panel');
+});
+
+
+test('QR: el enlace personal y el formato corto registran la misma asistencia; otros enlaces no', () => {
+  const h = env();
+  const m = h.addMember({ Nombres: 'Luis', Apellidos: 'Pérez' });
+  const device = pair(h);
+  const p = h.ctx.gbParseQr_;
+  assert.equal(p(BASE + '?carnet=' + m.TokenQR), m.TokenQR);
+  assert.equal(p('GB1:' + m.TokenQR), m.TokenQR);
+  for (const bad of ['http://x.co/?carnet=' + m.TokenQR, BASE + '?carnet=' + m.TokenQR + '&x=1', BASE + '?carnet=zz', BASE + '?otro=' + m.TokenQR, 'https://x.co/?carnet=' + m.TokenQR + ' extra']) {
+    assert.equal(p(bad), '', 'rechaza: ' + bad);
+  }
+  const r = h.plain(h.ctx.gbScanApi_({ action: 'scan', device, code: BASE + '?carnet=' + m.TokenQR }));
+  assert.equal(r.status, 'ok', 'el enlace del QR registra la visita');
+  assert.equal(h.ctx.gbScanApi_ && h.plain(h.ctx.gbScanApi_({ action: 'scan', device, code: 'GB1:' + m.TokenQR })).status, 'duplicado', 'mismo miembro por el formato corto: ya registrado');
 });
