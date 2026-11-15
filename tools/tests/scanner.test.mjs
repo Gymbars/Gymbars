@@ -219,3 +219,11 @@ test('qr: el enlace personal del carnet se reconoce y se convierte al formato co
     assert.equal(core.parseQr(bad), '', bad);
   }
 });
+
+test('página: el lector de QR (jsQR) va incluido en la carpeta, no depende de una CDN', () => {
+  const html = readFileSync(join(ROOT, 'checkin', 'index.html'), 'utf8');
+  assert.ok(html.includes('src="jsQR.js"'));
+  assert.ok(!/cdnjs[^"']*jsQR/i.test(html), 'esa ruta de cdnjs no existe (404)');
+  const lib = readFileSync(join(ROOT, 'checkin', 'jsQR.js'), 'utf8');
+  assert.ok(lib.length > 100000 && /jsQR/.test(lib), 'jsQR.js completo');
+});
