@@ -84,6 +84,9 @@ function doGet(e) {
     return cpGoogleAuthResultPage_(googleAuthResult);
   }
 
+  // Diagnóstico: ¿funciona la cámara dentro de una página de Apps Script? (no usa datos)
+  if (e && e.parameter && e.parameter.page === 'camera') return gbCameraTestPage_();
+
   // Páginas que se comparten por enlace (cada una valida su propio token o firma).
   if (e && e.parameter) {
     if (e.parameter.comprobante) return gbVoucherPage_(e.parameter.comprobante);

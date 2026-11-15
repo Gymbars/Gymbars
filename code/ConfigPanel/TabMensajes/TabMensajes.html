@@ -114,7 +114,7 @@
             gbCall('templates.save', [{ tipo: t.tipo, canal: t.canal, asunto: subject.value, texto: text.value }], function () {
               t.asunto = subject.value; t.texto = text.value;
               cpToast('Plantilla guardada.', 'ok');
-            }, { busy: true });
+            });
           } }
         ]
       });
@@ -126,6 +126,6 @@
       }
       sel.addEventListener('change', load);
       load();
-    }, { busy: true });
+    });
   }
 </script>

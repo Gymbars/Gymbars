@@ -233,8 +233,10 @@ function gbCarnetPage_(token) {
     '<a class="btn ghost" id="dl" href="#" download="carnet-gymbars.png">Descargar mi QR</a>' +
     '<div class="card muted" style="font-size:14px"><b style="color:var(--text)">Cómo usarlo</b><br>' +
     'Muestra este código en el tablet de la entrada para registrar tu asistencia. ' +
-    'Guárdalo en tu teléfono: mantén presionado el QR y elige guardar imagen. ' +
-    'En iPhone 15 Pro o posterior, abre la imagen en Fotos, toca ⓘ y elige «Agregar pase a Wallet».</div>' +
+    'Guárdalo en tu teléfono: mantén presionado el QR y elige guardar imagen.</div>' +
+    // Solo se muestra en iPhone: Apple permite crear un pase desde una imagen (iPhone 15 Pro o posterior).
+    '<div class="card muted" id="apple-tip" style="font-size:14px" hidden><b style="color:var(--text)">En tu iPhone</b><br>' +
+    'Si tu iPhone lo permite (15 Pro o posterior), abre la imagen en Fotos, toca ⓘ y elige «Agregar pase a Wallet».</div>' +
     '<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>' +
     '<script>(function(){' +
     'try{var qr=qrcode(0,"M");qr.addData(' + JSON.stringify(qrText) + ');qr.make();' +
@@ -242,6 +244,42 @@ function gbCarnetPage_(token) {
     'var x=c.getContext("2d");x.fillStyle="#fff";x.fillRect(0,0,size,size);x.fillStyle="#000";' +
     'for(var r=0;r<n;r++)for(var k=0;k<n;k++)if(qr.isDark(r,k))x.fillRect((k+m)*cell,(r+m)*cell,cell,cell);' +
     'var url=c.toDataURL("image/png");document.getElementById("qrimg").src=url;document.getElementById("dl").href=url;' +
-    '}catch(e){document.getElementById("qrimg").alt="No se pudo generar el código. Recarga la página."}})();</script>';
+    '}catch(e){document.getElementById("qrimg").alt="No se pudo generar el código. Recarga la página."}' +
+    'var ios=/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);' +
+    'if(ios)document.getElementById("apple-tip").hidden=false;})();</script>';
   return gbPage_('Carnet', body);
+}
+
+
+// ============================================================
+// ===  Prueba de cámara (diagnóstico para el tablet)  ========
+// ============================================================
+
+/**
+ * ?page=camera — Una página mínima que intenta abrir la cámara y dice qué pasó.
+ * Sirve para comprobar, en el tablet real, si la cámara funciona DENTRO de una página de Apps Script
+ * (Google la bloquea en muchos casos). No lee ni escribe ningún dato.
+ */
+function gbCameraTestPage_() {
+  var body =
+    '<h1>Prueba de cámara</h1>' +
+    '<p class="muted" style="margin-top:8px">Toca el botón y permite la cámara. Si aquí ves tu imagen, el escáner puede funcionar dentro de esta aplicación.</p>' +
+    '<button class="btn" id="go" type="button">Probar cámara</button>' +
+    '<video id="v" playsinline muted autoplay style="width:100%;margin-top:14px;background:#000" hidden></video>' +
+    '<div class="card" id="out" role="status">Todavía no se ha probado.</div>' +
+    '<div class="card muted" id="env" style="font-size:13px"></div>' +
+    '<script>(function(){' +
+    'var out=document.getElementById("out"),env=document.getElementById("env");' +
+    'var policy="desconocido";try{if(document.featurePolicy)policy=document.featurePolicy.allowsFeature("camera")?"permitida":"BLOQUEADA";}catch(e){}' +
+    'env.textContent="Página principal: "+(window.top===window.self?"sí":"no (está dentro de otra página)")+" · Permiso de cámara de la página: "+policy+" · Origen: "+location.origin;' +
+    'document.getElementById("go").addEventListener("click",function(){' +
+    'if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){out.textContent="✖ Este navegador no permite usar la cámara aquí.";return;}' +
+    'out.textContent="Pidiendo permiso…";' +
+    'navigator.mediaDevices.getUserMedia({video:{facingMode:"user"}}).then(function(stream){' +
+    'var v=document.getElementById("v");v.srcObject=stream;v.hidden=false;' +
+    'out.textContent="✔ La cámara funciona aquí. El escáner puede servirse desde Apps Script.";' +
+    '}).catch(function(err){' +
+    'out.textContent="✖ La cámara no está disponible aquí ("+err.name+"). Hay que publicar el escáner como página aparte (ver checkin/README.md).";' +
+    '});});})();</script>';
+  return gbPage_('Prueba de cámara', body);
 }

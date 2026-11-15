@@ -25,6 +25,14 @@ const server = spawn('node', [join(ROOT, 'tools', 'preview-admin.mjs'), '--demo'
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 for (let i = 0; i < 50; i++) { try { await fetch(BASE + '/'); break; } catch (_) { await sleep(100); } }
 
+const rpc = async (fn, args) => {
+  const r = await (await fetch(BASE + '/rpc', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fn, args }) })).json();
+  if (!r.ok) throw new Error(r.error);
+  return r.result;
+};
+const adminApi = (action, ...args) => rpc('gbApi', ['', action, args]);
+const lag = ms => fetch(`${BASE}/__lag?ms=${ms}`);
+
 let step = 0;
 const log = msg => console.log(`  ${String(++step).padStart(2, '0')}. ${msg}`);
 let failed = false;
@@ -198,11 +206,97 @@ try {
     assert.deepEqual(b.errors, [], 'errores de JavaScript: ' + b.errors.join(' | '));
     log('Sin errores de JavaScript');
   });
+  await run('Admin · servidor lento: carga unificada, doble clic, búsqueda instantánea y avisos', async () => {
+    const errorsBefore = b.errors.length;
+    await lag(700);                                                        // cada respuesta tarda 0,7 s
+    try {
+      await b.goto(`${BASE}/?tab=miembros`);
+      await b.waitFor('#gb-m-list .cp-gb-row', 20000);
+      assert.equal(await b.count('#pane-miembros .cp-gb-search-icon'), 1, 'icono de búsqueda en Miembros');
+      log('Lista cargada con un servidor lento');
+
+      // --- Lectura: barra de carga arriba (por encima de las ventanas) y esqueleto, sin textos «Cargando…»
+      await b.evaluate(`document.querySelector('#gb-m-list .cp-gb-row').click()`);
+      await sleep(350);
+      assert.equal(await b.evaluate(`document.getElementById('cp-progress').classList.contains('is-on')`), true, 'barra de carga visible');
+      const bar = await b.evaluate(`(function(){ var c = getComputedStyle(document.getElementById('cp-progress')); return { pos: c.position, z: Number(c.zIndex) }; })()`);
+      assert.equal(bar.pos, 'fixed');
+      const modalZ = await b.evaluate(`Number(getComputedStyle(document.querySelector('.cp-gb-modal')).zIndex)`);
+      assert.ok(bar.z > modalZ, 'la barra queda por encima de la ventana (' + bar.z + ' > ' + modalZ + ')');
+      assert.ok((await b.count('.cp-gb-modal .cp-skeleton')) >= 1, 'esqueleto mientras carga la ficha');
+      assert.ok(!/cargando/i.test(await b.evaluate('document.body.innerText')), 'sin textos «Cargando…»');
+      await b.shot(join(OUT, '60-carga-ficha.png'));
+      await b.waitFor('.cp-gb-modal [data-act="pay"]', 20000);
+      await b.waitFor('!document.getElementById("cp-progress").classList.contains("is-on")');
+      log('Barra y esqueleto durante la lectura; desaparecen al terminar');
+
+      // --- Acción que modifica datos: bloquea la ventana y un doble clic crea UN solo pago
+      const memberId = await b.evaluate(`GBM.open.memberId`);
+      const before = (await adminApi('members.get', memberId)).pagos.length;
+      await b.click('.cp-gb-modal [data-act="pay"]');
+      await b.waitFor('.cp-gb-modal [name="montoSel"]');
+      await b.type('.cp-gb-modal:last-of-type [name="nota"]', 'doble clic');
+      await b.evaluate(`(function(){ var btn = document.querySelector('.cp-gb-modal:last-of-type .cp-gb-modal-foot .cp-btn--primary'); btn.click(); btn.click(); btn.click(); })()`);
+      await sleep(250);
+      const card = await b.evaluate(`(function(){ var c = document.querySelector('.cp-gb-modal:last-of-type .cp-gb-modal-card'); return { blocked: c.classList.contains('is-blocked'), events: getComputedStyle(c).pointerEvents, busy: c.getAttribute('aria-busy') }; })()`);
+      assert.deepEqual(card, { blocked: true, events: 'none', busy: 'true' }, 'la ventana queda bloqueada mientras guarda');
+      await b.shot(join(OUT, '61-carga-bloqueo.png'));
+      await b.waitFor('[data-msg-act="wa"]', 20000);
+      const after = (await adminApi('members.get', memberId)).pagos.length;
+      assert.equal(after, before + 1, 'tres clics seguidos registraron un solo pago');
+      log('Triple clic → un solo pago (' + before + ' → ' + after + ')');
+      await b.evaluate(`document.querySelectorAll('.cp-gb-modal').forEach(function(m){ m.remove(); }); GB.modals.length = 0;`);
+
+      // --- Búsqueda instantánea: no llama al servidor por cada letra (con 0,7 s de retraso se nota)
+      await b.waitFor('!document.getElementById("cp-progress").classList.contains("is-on")');
+      const calls = await b.evaluate('window.__rpcLog.filter(function (x) { return x === "members.search"; }).length');
+      await b.type('#gb-m-q', 'MARIA');
+      await sleep(120);
+      const rows = await b.count('#gb-m-list .cp-gb-row');
+      assert.ok(rows >= 1 && rows < 24, 'filtra al instante, sin importar mayúsculas ni tildes (' + rows + ')');
+      await sleep(900);
+      assert.equal(await b.evaluate('window.__rpcLog.filter(function (x) { return x === "members.search"; }).length'), calls, 'sin llamadas al servidor al buscar');
+      log('Búsqueda "MARIA" → ' + rows + ' resultado(s) en menos de 120 ms, 0 llamadas al servidor');
+      assert.equal(await b.evaluate(`document.getElementById('gb-m-q-clear').hidden`), false, 'botón de borrar visible');
+      await b.click('#gb-m-q-clear');
+      assert.ok((await b.count('#gb-m-list .cp-gb-row')) > rows, 'borrar la búsqueda devuelve la lista completa');
+      await b.type('#gb-m-q', 'maria');
+      await b.evaluate(`document.getElementById('gb-m-q').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))`);
+      await b.waitFor('.cp-gb-modal [data-act="pay"]', 20000);
+      log('Enter abre el primer resultado');
+      await b.evaluate(`document.querySelectorAll('.cp-gb-modal').forEach(function(m){ m.remove(); }); GB.modals.length = 0;`);
+
+      // --- Asistencia: mismo buscador (icono, borrar, búsqueda local)
+      await b.click('[data-tab="asistencia"]');
+      await b.waitFor('#gb-a-q');
+      assert.equal(await b.count('#gb-a-q ~ .cp-gb-search-clear'), 1);
+      assert.equal(await b.count('#pane-asistencia .cp-gb-search-icon'), 1);
+      await b.type('#gb-a-q', 'maria');
+      await b.waitFor('#gb-a-results [data-visit]');
+      log('Asistencia: el mismo buscador, también instantáneo');
+
+      // --- Avisos: error del servidor y error inesperado del navegador
+      await b.evaluate(`gbCall('members.get', ['GB-9999'], function () {})`);
+      await b.waitFor('.cp-toast--error');
+      assert.match(await b.text('.cp-toast--error'), /No se encontró el miembro/);
+      log('Error del servidor → aviso: ' + (await b.text('.cp-toast--error')).trim());
+      await b.evaluate(`document.getElementById('cp-toasts').innerHTML = ''; window.dispatchEvent(new ErrorEvent('error', { message: 'prueba' }))`);
+      await b.waitFor('.cp-toast--error');
+      assert.match(await b.text('.cp-toast--error'), /error inesperado/);
+      log('Error inesperado del navegador → aviso');
+    } finally {
+      await lag(0);
+    }
+    assert.deepEqual(b.errors.slice(errorsBefore), [], 'errores de JavaScript: ' + b.errors.slice(errorsBefore).join(' | '));
+  });
   await b.close();
 
   // ---------------------------------------------------------------- Entrenador
   const c = await launchChrome({ width: 1360, height: 900 });
   await run('Entrenador (Coach)', async () => {
+    const target = (await adminApi('members.search', '', {})).items[3];             // el rol aún es Admin: se lee el DPI completo
+    const targetDpi = (await adminApi('members.get', target.memberId)).member.dpi;
+    assert.match(targetDpi, /^\d{13}$/);
     await c.goto(`${BASE}/?rol=coach&tab=ajustes`);          // pide una pestaña solo-Admin a propósito
     await c.waitFor('#gb-progress .cp-gb-stat');
     log('Entra a Progreso aunque pidió Ajustes (no tiene permiso)');
@@ -224,6 +318,15 @@ try {
     assert.ok(!/Pagos \(/.test(await c.text('.cp-gb-modal-body')), 'sin sección de pagos');
     log('Ficha del entrenador: sin pagos, sin eliminar, DPI enmascarado');
     await c.shot(join(OUT, '21-coach-ficha.png'));
+    await c.evaluate(`document.querySelectorAll('.cp-gb-modal').forEach(function(m){ m.remove(); }); GB.modals.length = 0;`);
+
+    // El entrenador no tiene el DPI completo en su lista: buscarlo entero cae al servidor, que sí lo encuentra.
+    await c.type('#gb-m-q', targetDpi);
+    await c.waitFor('#gb-m-list .cp-gb-row', 6000);
+    assert.equal(await c.count('#gb-m-list .cp-gb-row'), 1);
+    assert.match(await c.text('#gb-m-list .cp-gb-name'), new RegExp(target.nombre.split(' ')[0], 'i'));
+    assert.ok(!JSON.stringify(await c.evaluate('GB.members.items')).includes(targetDpi), 'el DPI completo nunca estuvo en el navegador del entrenador');
+    log('Búsqueda por DPI completo del entrenador: encontrada por el servidor, sin exponer el DPI');
 
     // el servidor rechaza una acción de Admin aunque se invoque a mano, sin cerrar la sesión
     const res = await c.evaluate(`new Promise(function(resolve){ cpRun('payments.register', [{memberId:'GB-0001', monto:150}], { busy:false, ok:function(){ resolve('OK'); }, fail:function(m){ resolve(m); } }); })`);
@@ -235,13 +338,6 @@ try {
   await c.close();
 
   // ---------------------------------------------------------------- Escáner del tablet (extremo a extremo)
-  const rpc = async (fn, args) => {
-    const r = await (await fetch(BASE + '/rpc', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fn, args }) })).json();
-    if (!r.ok) throw new Error(r.error);
-    return r.result;
-  };
-  const adminApi = (action, ...args) => rpc('gbApi', ['', action, args]);
-
   const t = await launchChrome({ width: 1024, height: 768, args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] });
   await run('Escáner del tablet (emparejar y escanear con la página real)', async () => {
     await fetch(BASE + '/');                                              // fija el rol de Admin del servidor
@@ -329,6 +425,52 @@ try {
     assert.deepEqual(t.errors, [], 'errores de JavaScript: ' + t.errors.join(' | '));
   });
   await t.close();
+
+  // ---------------------------------------------------------------- Páginas públicas: carnet, dominio propio y cámara
+  const pp = await launchChrome({ width: 430, height: 900, mobile: true, args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] });
+  await run('Páginas públicas (carnet, enlaces con dominio propio, prueba de cámara)', async () => {
+    await fetch(BASE + '/');                                             // rol Admin
+    const person = (await adminApi('members.search', '', { estado: 'Activo' })).items[0];
+    const card = await adminApi('wallet.carnet', person.memberId);
+    const token = card.enlace.split('carnet=')[1];
+
+    await pp.goto(card.enlace);
+    await pp.waitFor('#qrimg');
+    assert.equal(await pp.evaluate(`document.getElementById('apple-tip').hidden`), true, 'el aviso de iPhone está oculto en otros dispositivos');
+    assert.ok(!/wallet/i.test(await pp.evaluate('document.body.innerText')), 'sin «Wallet» visible fuera de un iPhone');
+    log('Carnet en un dispositivo normal: sin texto de Wallet');
+    await pp.send('Emulation.setUserAgentOverride', { userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1' });
+    await pp.goto(card.enlace);
+    await pp.waitFor('document.getElementById("apple-tip").hidden === false');
+    assert.match(await pp.text('#apple-tip'), /Agregar pase a Wallet/);
+    await pp.shot(join(OUT, '70-carnet-iphone.png'), { fullPage: true });
+    log('Carnet en iPhone: aparece el aviso de Wallet');
+    await pp.send('Emulation.setUserAgentOverride', { userAgent: '' });
+
+    // Enlace con el dominio propio: la página muestra la del Web App y conserva la dirección
+    await pp.goto(`${BASE}/checkin/v/?carnet=${token}&otro=http://evil.example`);
+    await pp.waitFor('document.getElementById("app").hidden === false');
+    await pp.waitFor(`(function(){ var d = document.getElementById('app').contentDocument; return !!(d && d.querySelector('h1') && /\\S/.test(d.querySelector('h1').textContent)); })()`);
+    const inner = await pp.evaluate(`document.getElementById('app').contentDocument.querySelector('h1').textContent`);
+    assert.match(inner.toLowerCase(), new RegExp(person.nombres.toLowerCase().split(' ')[0]));
+    assert.equal(await pp.evaluate(`new URL(document.getElementById('app').src).search`), '?carnet=' + token, 'solo se reenvía el parámetro válido');
+    assert.ok((await pp.evaluate('location.href')).startsWith(`${BASE}/checkin/v/`), 'la barra de direcciones conserva el dominio propio');
+    log('Enlace por dominio propio muestra el carnet de ' + inner.trim());
+    await pp.goto(`${BASE}/checkin/v/?carnet=no-es-valido`);
+    await pp.waitFor('document.getElementById("msg").hidden === false');
+    assert.equal(await pp.evaluate('document.getElementById("app").hidden'), true);
+    await pp.goto(`${BASE}/checkin/v/?page=admin`);
+    await pp.waitFor('document.getElementById("msg").hidden === false');
+    log('Enlaces inválidos o que intentan abrir el panel: «Enlace no válido»');
+
+    // Prueba de cámara dentro de la página de Apps Script
+    await pp.goto(`${BASE}/exec?page=camera`);
+    await pp.click('#go');
+    await pp.waitFor('document.getElementById("out").textContent.indexOf("✔") !== -1', 8000);
+    log('Prueba de cámara: ' + (await pp.text('#out')).trim().slice(0, 60));
+    assert.deepEqual(pp.errors, [], 'errores de JavaScript: ' + pp.errors.join(' | '));
+  });
+  await pp.close();
 
   // ---------------------------------------------------------------- Móvil
   const m = await launchChrome({ width: 390, height: 844, mobile: true });

@@ -51,6 +51,17 @@ panel carga.
   es el **último recurso**: no revierte el código del script y **borra todo lo registrado después** (pagos, visitas…).
   Prefiere corregir hacia adelante; si hay datos dañados, usa el respaldo del paso 5.
 
+## Enlaces con tu propio dominio (opcional)
+
+Apps Script no puede servirse desde un dominio propio. Lo que sí se puede es publicar una página mínima en un subdominio tuyo que muestre la de Apps Script dentro:
+
+1. Publica la carpeta `checkin/` en GitHub Pages (ver `checkin/README.md`); incluye `link-core.js` y `v/index.html`.
+2. En tu DNS crea un `CNAME` (por ejemplo `app.tudominio.com`) hacia `<usuario>.github.io` y actívalo en Settings → Pages → Custom domain.
+3. En `checkin/config.js` pon la URL del Web App de cada entorno.
+4. En Propiedades del script agrega `GB_REPORT_BASE_URL` = `https://app.tudominio.com/v/`.
+
+Los enlaces de carnet, comprobante y reporte salen entonces como `https://app.tudominio.com/v/?carnet=…`. La página solo reenvía esos tres tipos de enlace y rechaza cualquier otro (por ejemplo el panel). Si no defines la propiedad, se sigue usando la URL de Apps Script.
+
 ## Primera vez: preparar pruebas (una vez)
 
 1. Hoja de pruebas = copia de la real (ya la tienes). Abre *Extensiones → Apps Script* y comprueba que el ID del proyecto

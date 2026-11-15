@@ -155,3 +155,56 @@ test('página: carga config.js, la lógica y jsQR; avisa si se abre dentro de ot
   const config = readFileSync(join(ROOT, 'checkin', 'config.js'), 'utf8');
   assert.match(config, /apiUrl: ''/, 'el repositorio no trae una URL de producción');
 });
+
+
+// ---------------------------------------------------------------- enlaces con tu dominio (checkin/v)
+
+const links = require(join(ROOT, 'checkin', 'link-core.js'));
+const EXEC = 'https://script.google.com/macros/s/AKfycbwTEST_-id123/exec';
+const T24 = 'ab12cd34ef56ab12cd34ef56';
+const S32 = '0123456789abcdef0123456789abcdef';
+
+test('enlaces: el carnet y la boleta se reenvían tal cual al Web App', () => {
+  assert.equal(links.buildTarget('?carnet=' + T24, EXEC), EXEC + '?carnet=' + T24);
+  assert.equal(links.buildTarget('?comprobante=' + T24, EXEC), EXEC + '?comprobante=' + T24);
+});
+
+test('enlaces: el reporte firmado exige tipo, miembro, registro y firma coherentes', () => {
+  assert.equal(links.buildTarget(`?reporte=medidas&m=GB-0012&r=MD-00007&s=${S32}`, EXEC), `${EXEC}?reporte=medidas&m=GB-0012&r=MD-00007&s=${S32}`);
+  assert.equal(links.buildTarget(`?reporte=evaluacion&m=GB-0012&r=EV-00003&s=${S32}`, EXEC), `${EXEC}?reporte=evaluacion&m=GB-0012&r=EV-00003&s=${S32}`);
+  for (const bad of [
+    `?reporte=medidas&m=GB-0012&r=EV-00007&s=${S32}`,      // el registro no corresponde al tipo
+    `?reporte=evaluacion&m=GB-0012&r=MD-00007&s=${S32}`,
+    `?reporte=otro&m=GB-0012&r=MD-00007&s=${S32}`,
+    `?reporte=medidas&m=12&r=MD-00007&s=${S32}`,
+    `?reporte=medidas&m=GB-0012&r=MD-7&s=${S32}`,
+    `?reporte=medidas&m=GB-0012&r=MD-00007&s=corta`,
+    `?reporte=medidas&m=GB-0012&r=MD-00007`
+  ]) assert.equal(links.buildTarget(bad, EXEC), '', bad);
+});
+
+test('enlaces: solo pasan las formas exactas; parámetros extra o intentos de inyección se descartan', () => {
+  assert.equal(links.buildTarget('', EXEC), '');
+  assert.equal(links.buildTarget('?carnet=corto', EXEC), '');
+  assert.equal(links.buildTarget('?carnet=' + 'g'.repeat(24), EXEC), '', 'no hexadecimal');
+  assert.equal(links.buildTarget('?page=admin', EXEC), '', 'no se puede abrir el panel por aquí');
+  assert.equal(links.buildTarget('?api=data', EXEC), '');
+  assert.equal(links.buildTarget('?carnet=' + T24 + '&page=admin&x=http://evil.com', EXEC), EXEC + '?carnet=' + T24, 'lo extra se ignora');
+  assert.equal(links.buildTarget('?carnet=' + T24 + '%26page%3Dadmin', EXEC), '', 'el valor codificado no es hexadecimal');
+  assert.equal(links.buildTarget('?carnet=https://evil.com/' + T24, EXEC), '');
+});
+
+test('enlaces: solo apunta a un /exec de script.google.com (o a localhost si se permite para la vista previa)', () => {
+  for (const bad of ['', undefined, 'http://script.google.com/macros/s/AKfy/exec', 'https://evil.com/macros/s/AKfy/exec',
+    'https://script.google.com/macros/s/AKfy/dev', 'https://script.google.com/macros/s/AKfy/exec?x=1', 'https://script.google.com/macros/s/AKfy/exec/..//x', 'javascript:alert(1)']) {
+    assert.equal(links.buildTarget('?carnet=' + T24, bad), '', String(bad));
+  }
+  assert.equal(links.buildTarget('?carnet=' + T24, 'http://localhost:3200/exec'), '', 'localhost no se acepta por defecto');
+  assert.equal(links.buildTarget('?carnet=' + T24, 'http://localhost:3200/exec', { allowLocal: true }), 'http://localhost:3200/exec?carnet=' + T24);
+});
+
+test('enlaces: la página usa el módulo, no admite configuración ajena y no se indexa', () => {
+  const html = readFileSync(join(ROOT, 'checkin', 'v', 'index.html'), 'utf8');
+  for (const needle of ['../link-core.js', '../config.js', 'buildTarget(location.search', 'noindex', 'no-referrer']) assert.ok(html.includes(needle), needle);
+  assert.ok(!/location\.(href|hash)\s*=|window\.open|document\.write/.test(html), 'sin redirecciones libres');
+});

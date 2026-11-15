@@ -1,5 +1,9 @@
 <div class="cp-toolbar">
-  <input type="search" id="gb-m-q" class="cp-gb-search" placeholder="Buscar por nombre, ID, DPI o teléfono" autocomplete="off" data-no-dirty>
+  <div class="cp-gb-searchbox cp-gb-search">
+    <svg class="cp-gb-search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg>
+    <input type="search" id="gb-m-q" placeholder="Buscar por nombre, ID, DPI o teléfono" autocomplete="off" aria-label="Buscar miembro" data-no-dirty>
+    <button type="button" class="cp-gb-search-clear" id="gb-m-q-clear" aria-label="Borrar búsqueda" hidden>&times;</button>
+  </div>
   <select id="gb-m-estado" class="cp-gb-select" data-no-dirty aria-label="Filtrar por estado">
     <option value="">Todos los estados</option>
     <option value="Activo">Activos</option>
@@ -26,23 +30,46 @@
   // ===  Miembros: lista, ficha y formularios  =================
   // ============================================================
 
-  var GBM = { query: '', estado: '', pago: '', loaded: false, seq: 0, open: null };
+  var GBM = { query: '', estado: '', pago: '', rendered: false, seq: 0, open: null };
+  var GBM_MAX_ROWS = 150;       // más filas que esto se resumen: hay que afinar la búsqueda
 
   function gbShowMembers() {
     gbRefreshMessageBadge();
-    if (!GBM.loaded) gbMembersSearch();
+    var list = document.getElementById('gb-m-list');
+    if (!GBM.rendered) list.innerHTML = gbSkeleton(7);
+    // Si ya hay una lista en memoria se muestra al instante y se refresca sola en segundo plano.
+    gbGetMembers(function () { gbApplyMembersFilter(); });
   }
 
-  // ---------- Lista ----------
-
+  /** Recarga la lista desde el servidor (tras guardar algo) y la vuelve a pintar. */
   function gbMembersSearch() {
+    gbInvalidateMembers();
+    gbGetMembers(function () { gbApplyMembersFilter(); }, { force: true });
+  }
+
+  /** Filtra EN EL NAVEGADOR mientras se escribe (sin llamar al servidor por cada letra). */
+  function gbApplyMembersFilter() {
+    var all = GB.members.items || [];
+    var found = gbFilterMembers(all, GBM.query, { estado: GBM.estado, pago: GBM.pago });
+    GBM.rendered = true;
+    GBM.currentItems = found;
+    gbRenderMembers({ items: found, total: found.length, totalMiembros: all.length });
+
+    // Un DPI completo no está en la lista de un Coach (solo ve los últimos 4 dígitos): si parece un DPI o un
+    // teléfono y no hay coincidencias, se consulta al servidor, que sí busca con el número completo.
+    var digits = GBM.query.replace(/\D/g, '');
+    if (!found.length && digits.length >= 6) gbServerSearchFallback();
+  }
+
+  var gbServerSearchFallback = gbDebounce(function () {
     var seq = ++GBM.seq;
-    gbCall('members.search', [GBM.query, { estado: GBM.estado, pago: GBM.pago }], function (result) {
-      if (seq !== GBM.seq) return;           // llegó una respuesta vieja
-      GBM.loaded = true;
+    var query = GBM.query;
+    gbCall('members.search', [query, { estado: GBM.estado, pago: GBM.pago }], function (result) {
+      if (seq !== GBM.seq || query !== GBM.query || !result.items.length) return;
+      GBM.currentItems = result.items;
       gbRenderMembers(result);
     });
-  }
+  }, 350);
 
   function gbRenderMembers(result) {
     var list = document.getElementById('gb-m-list');
@@ -57,37 +84,43 @@
       return;
     }
 
-    list.innerHTML = '<div class="cp-gb-list">' + result.items.map(function (m) {
-      return '<button type="button" class="cp-gb-row" data-member="' + cpEsc(m.memberId) + '">' +
+    var shown = result.items.slice(0, GBM_MAX_ROWS);
+    list.innerHTML = '<div class="cp-gb-list">' + shown.map(function (m) {
+      return '<button type="button" class="cp-gb-row" data-member="' + cpEsc(m.memberId) + '" data-name="' + cpEsc(m.nombre) + '">' +
         '<div><div class="cp-gb-name">' + cpEsc(m.nombre) + '</div>' +
           '<div class="cp-gb-sub">' + cpEsc(m.memberId) + (m.edad !== '' ? ' · ' + m.edad + ' años' : '') + '</div></div>' +
         '<div class="cp-gb-sub" style="font-size:12.5px;color:var(--cp-text)">' + cpEsc(m.telefono.replace(/^(\d{4})(\d{4})$/, '$1-$2')) + '</div>' +
         '<div>' + gbPagoChip(m.pago) + '<div class="cp-gb-sub">' + cpEsc(gbVenceTexto(m.pago)) + '</div></div>' +
         '<div class="cp-gb-cell-end">' + (m.estado === 'Activo' ? '' : gbEstadoChip(m.estado)) + '</div>' +
       '</button>';
-    }).join('') + '</div>';
+    }).join('') + '</div>' +
+    (result.items.length > shown.length
+      ? '<p class="cp-hint" style="margin-top:8px">Mostrando ' + shown.length + ' de ' + result.items.length + '. Escribe más para afinar la búsqueda.</p>' : '');
   }
 
-  document.getElementById('gb-m-q').addEventListener('input', gbDebounce(function (e) {
-    GBM.query = e.target.value; gbMembersSearch();
-  }, 250));
-  document.getElementById('gb-m-estado').addEventListener('change', function (e) { GBM.estado = e.target.value; gbMembersSearch(); });
-  document.getElementById('gb-m-pago').addEventListener('change', function (e) { GBM.pago = e.target.value; gbMembersSearch(); });
+  gbBindSearchBox('gb-m-q',
+    function (text) { GBM.query = text; gbApplyMembersFilter(); },
+    function () {                                   // Enter abre el primer resultado
+      var first = (GBM.currentItems || [])[0];
+      if (first) gbOpenMember(first.memberId, first.nombre);
+    });
+  document.getElementById('gb-m-estado').addEventListener('change', function (e) { GBM.estado = e.target.value; gbApplyMembersFilter(); });
+  document.getElementById('gb-m-pago').addEventListener('change', function (e) { GBM.pago = e.target.value; gbApplyMembersFilter(); });
   document.getElementById('gb-m-new').addEventListener('click', function () { gbMemberForm(null); });
   document.getElementById('gb-m-list').addEventListener('click', function (e) {
     var row = e.target.closest('[data-member]');
-    if (row) gbOpenMember(row.getAttribute('data-member'));
+    if (row) gbOpenMember(row.getAttribute('data-member'), row.getAttribute('data-name'));
   });
   document.getElementById('gb-fees').innerHTML = GB.fees.map(function (f) { return '<option value="' + f + '"></option>'; }).join('');
 
   // ---------- Ficha ----------
 
   /** Abre la ficha de un miembro (también la usan Progreso y Asistencia). */
-  function gbOpenMember(memberId) {
+  function gbOpenMember(memberId, name) {
     if (GBM.open && GBM.open.modal) GBM.open.modal.close();
     var modal = gbModal({
-      title: 'Cargando…', size: 'lg', autofocus: false,
-      body: '<div class="cp-empty">Cargando ficha…</div>',
+      title: name || 'Miembro', size: 'lg', autofocus: false,
+      body: gbSkeleton(6),
       onClose: function () { GBM.open = null; }
     });
     GBM.open = { memberId: memberId, modal: modal, data: null };
@@ -233,26 +266,26 @@
     else if (act === 'voucher') gbQueueMessage({ type: 'boleta', memberId: m.memberId, paymentId: id, force: true }, 'Boleta de pago');
     else if (act === 'void') {
       gbConfirm('¿Anular este pago? Se borra del historial y cambia la fecha de próximo pago.', { title: 'Anular pago', danger: true, okLabel: 'Anular' }, function () {
-        gbCall('payments.void', [id], function () { cpToast('Pago anulado.', 'ok'); gbAfterChange(); }, { busy: true });
+        gbCall('payments.void', [id], function () { cpToast('Pago anulado.', 'ok'); gbAfterChange(); });
       });
     } else if (act === 'rm-measure') {
       gbConfirm('¿Quitar este registro de medidas?', { title: 'Quitar medidas', danger: true, okLabel: 'Quitar' }, function () {
-        gbCall('measurements.remove', [id], function () { cpToast('Registro quitado.', 'ok'); gbAfterChange(); }, { busy: true });
+        gbCall('measurements.remove', [id], function () { cpToast('Registro quitado.', 'ok'); gbAfterChange(); });
       });
     } else if (act === 'rm-eval') {
       gbConfirm('¿Quitar esta evaluación?', { title: 'Quitar evaluación', danger: true, okLabel: 'Quitar' }, function () {
-        gbCall('evaluations.remove', [id], function () { cpToast('Evaluación quitada.', 'ok'); gbAfterChange(); }, { busy: true });
+        gbCall('evaluations.remove', [id], function () { cpToast('Evaluación quitada.', 'ok'); gbAfterChange(); });
       });
     } else if (act === 'status') {
       var to = btn.getAttribute('data-to');
-      gbCall('members.setStatus', [m.memberId, to], function () { cpToast('Estado: ' + to + '.', 'ok'); gbAfterChange(); }, { busy: true });
+      gbCall('members.setStatus', [m.memberId, to], function () { cpToast('Estado: ' + to + '.', 'ok'); gbAfterChange(); });
     } else if (act === 'delete') gbDeleteMember(m);
   }
 
   /** Refresca la ficha abierta y la lista detrás de ella. */
   function gbAfterChange() {
     gbReloadFicha();
-    if (GBM.loaded) gbMembersSearch();
+    gbMembersSearch();
   }
 
   // ---------- Enviar mensaje ----------
@@ -297,7 +330,7 @@
       }
       cpToast('Visita registrada a las ' + r.hora + '.', 'ok');
       gbReloadFicha();
-    }, { busy: true });
+    });
   }
 
   // ---------- Formulario: miembro ----------
@@ -338,7 +371,7 @@
             if (!r.ok) { gbSetErrors(h.body, r.errors); cpToast(r.message || 'Revisa los campos marcados.', 'warn'); return; }
             h.close();
             cpToast(r.created ? 'Miembro registrado.' : 'Cambios guardados.', 'ok');
-            if (GBM.loaded) gbMembersSearch();
+            gbMembersSearch();
             if (r.created) gbOpenMember(r.member.memberId); else if (GBM.open) gbReloadFicha();
           }, { fail: function (msg) { h.busy(false); cpToast(msg, 'error'); } });
         } }
@@ -355,12 +388,12 @@
           gbConfirm('Tiene historial: ' + c.pagos + ' pagos, ' + c.medidas + ' medidas, ' + c.evaluaciones + ' evaluaciones, ' + c.asistencia +
             ' asistencias y ' + c.mensajes + ' mensajes. ¿Borrar al miembro Y todo su historial? No se puede deshacer.',
             { title: 'Borrar también el historial', danger: true, okLabel: 'Borrar todo' }, function () {
-            gbCall('members.delete', [m.memberId, true], function () { gbAfterDelete(); }, { busy: true });
+            gbCall('members.delete', [m.memberId, true], function () { gbAfterDelete(); });
           });
           return;
         }
         gbAfterDelete();
-      }, { busy: true });
+      });
     });
   }
 
@@ -444,7 +477,7 @@
             gbCall('measurements.register', [data], function (res) {
               h.busy(false);
               if (!res.ok) { gbSetErrors(h.body, res.errors || {}); cpToast(res.message || 'Revisa los campos marcados.', 'warn'); return; }
-              h.close(); gbAfterChange();
+              h.close(); gbAfterChange(); cpToast('Medidas guardadas.', 'ok');
               gbConfirm('Medidas registradas. ¿Preparar el reporte para enviárselo por WhatsApp?', { title: 'Medidas guardadas', okLabel: 'Preparar reporte' }, function () {
                 gbQueueMessage({ type: 'medidas', memberId: m.memberId, measurementId: res.medida.medidaId, force: true }, 'Reporte de medidas');
               });
@@ -452,7 +485,7 @@
           } }
         ]
       });
-    }, { busy: true });
+    });
   }
 
   // ---------- Formulario: evaluación ----------
@@ -479,7 +512,7 @@
             gbCall('evaluations.register', [{ memberId: m.memberId, fecha: fecha, valores: values }], function (res) {
               h.busy(false);
               if (!res.ok) { gbSetErrors(h.body, res.errors || {}); cpToast(res.message || 'Revisa los campos marcados.', 'warn'); return; }
-              h.close(); gbAfterChange();
+              h.close(); gbAfterChange(); cpToast('Evaluación guardada.', 'ok');
               var p = res.evaluacion.puntajes;
               var summary = [0, 1, 2, 3].filter(function (l) { return p['n' + l] !== ''; }).map(function (l) { return 'Nivel ' + l + ': ' + Math.round(p['n' + l] * 100) + ' %'; }).join(' · ');
               gbConfirm('Evaluación guardada. ' + summary + '. ¿Preparar el reporte para enviarlo por WhatsApp?', { title: 'Evaluación guardada', okLabel: 'Preparar reporte' }, function () {

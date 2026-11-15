@@ -1,4 +1,4 @@
-<div class="cp-panel" id="gb-s-auto"><div class="cp-empty">Cargando…</div></div>
+<div class="cp-panel" id="gb-s-auto"></div>
 <div class="cp-panel" id="gb-s-devices"></div>
 <div class="cp-panel" id="gb-s-config"></div>
 <div class="cp-panel">
@@ -20,6 +20,7 @@
 
   function gbShowSettings() {
     gbRefreshMessageBadge();
+    if (!GBS.status) document.getElementById('gb-s-auto').innerHTML = gbSkeleton(4);
     gbCall('automation.status', [], function (s) { GBS.status = s; gbRenderAutomation(); });
     gbCall('devices.list', [], function (d) { GBS.devices = d; gbRenderDevices(); });
     gbCall('config.get', [], function (c) { GBS.config = c; gbRenderConfig(); });
@@ -56,7 +57,7 @@
       gbCall('automation.setEnabled', [!s.activa], function (st) {
         GBS.status = st; gbRenderAutomation();
         cpToast(st.activa ? 'Automatización encendida. Mañana a las ' + st.hora + ':00 se prepara el primer lote.' : 'Automatización apagada.', 'ok');
-      }, { busy: true });
+      });
     };
     document.getElementById('gb-s-dry').onclick = gbShowDryRun;
     document.getElementById('gb-s-review').onclick = gbShowReview;
@@ -66,12 +67,12 @@
           var created = Object.keys(r.creados || {}).reduce(function (n, k) { return n + r.creados[k]; }, 0);
           cpToast(created + ' mensajes nuevos en la bandeja.' + (r.errores ? ' (' + r.errores + ' con error)' : ''), r.errores ? 'warn' : 'ok');
           gbShowSettings();
-        }, { busy: 'Preparando mensajes…' });
+        });
       });
     };
     var install = document.getElementById('gb-s-install');
     if (install) install.onclick = function () {
-      gbCall('automation.install', [], function (r) { cpToast('Proceso diario programado a las ' + r.hora + ':00.', 'ok'); gbShowSettings(); }, { busy: true });
+      gbCall('automation.install', [], function (r) { cpToast('Proceso diario programado a las ' + r.hora + ':00.', 'ok'); gbShowSettings(); });
     };
   }
 
@@ -88,7 +89,7 @@
           }).join('') + '</table>';
       gbModal({ title: 'Simulacro: no se envió ni se guardó nada', size: 'lg', body: body, autofocus: false,
         foot: [{ label: 'Cerrar', onClick: function (h) { h.close(); } }] });
-    }, { busy: 'Calculando…' });
+    });
   }
 
   function gbShowReview() {
@@ -113,8 +114,8 @@
             var ids = Array.prototype.map.call(h.body.querySelectorAll('.gb-rv:checked'), function (c) { return c.value; });
             if (!ids.length) { cpToast('Marca al menos un miembro.', 'warn'); return; }
             gbCall('members.bulkStatus', [ids, 'Inactivo'], function (res) {
-              h.close(); cpToast(res.cambiados + ' miembros pasaron a inactivo.', 'ok'); GBM.loaded = false; gbShowSettings();
-            }, { busy: true });
+              h.close(); cpToast(res.cambiados + ' miembros pasaron a inactivo.', 'ok'); gbInvalidateMembers(); gbShowSettings();
+            });
           } } : { label: ' ', onClick: function () {} }
         ].filter(function (b) { return b.label.trim(); })
       });
@@ -122,7 +123,7 @@
       if (all) all.onclick = function () {
         Array.prototype.forEach.call(modal.body.querySelectorAll('.gb-rv'), function (c) { c.checked = Number(c.getAttribute('data-days')) > 60 || c.getAttribute('data-days') === '0'; });
       };
-    }, { busy: 'Cargando…' });
+    });
   }
 
   // ---------- Tablets de asistencia ----------
@@ -151,7 +152,7 @@
     Array.prototype.forEach.call(box.querySelectorAll('[data-revoke]'), function (b) {
       b.onclick = function () {
         gbConfirm('El tablet dejará de poder registrar asistencia. Podrás conectarlo de nuevo con un código nuevo.', { title: 'Revocar tablet', danger: true, okLabel: 'Revocar' }, function () {
-          gbCall('devices.revoke', [b.getAttribute('data-revoke')], function () { cpToast('Tablet revocado.', 'ok'); gbShowSettings(); }, { busy: true });
+          gbCall('devices.revoke', [b.getAttribute('data-revoke')], function () { cpToast('Tablet revocado.', 'ok'); gbShowSettings(); });
         });
       };
     });
@@ -173,7 +174,7 @@
                 '<p class="cp-hint">Cuando el tablet quede conectado aparecerá en la lista.</p>',
               foot: [{ label: 'Listo', kind: 'primary', onClick: function (m) { m.close(); gbShowSettings(); } }]
             });
-          }, { busy: true });
+          });
         } }
       ]
     });
@@ -215,7 +216,7 @@
         }
         var k = changed[i];
         gbCall('config.set', [k, data[k]], function () { done++; next(i + 1); },
-          { busy: true, fail: function (msg) { errors[k] = msg; next(i + 1); } });
+          { fail: function (msg) { errors[k] = msg; next(i + 1); } });
       })(0);
     };
   }

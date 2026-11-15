@@ -4,6 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { loadGas, memSheet } from './gas-sandbox.mjs';
 
 const FILES = ['Auth.gs', 'Api.gs', 'Schema.gs', 'Repo.gs', 'Rules.gs', 'Members.gs', 'Payments.gs', 'Measurements.gs',
@@ -792,4 +793,33 @@ test('carga masiva: una tabla grande crece más allá de las 1000 filas de una h
   h.ctx.gbBulkAppend_('payments', rows);
   assert.equal(h.ctx.gbList_('payments').length, 1500);
   assert.equal(h.sheets['Pagos'].data[1500][0], 'PG-01500');
+});
+
+
+// ============================================================ Carnet (Wallet) y prueba de cámara
+
+test('carnet: el texto de Wallet de Apple va en un bloque oculto que solo se muestra en iPhone', () => {
+  const h = env();
+  const m = h.addMember();
+  const html = h.ctx.gbCarnetPage_(m.TokenQR).html;
+  const visible = html.replace(/<div class="card muted" id="apple-tip"[\s\S]*?<\/div>/, '');
+  assert.ok(!/Wallet/.test(visible.replace(/<script[\s\S]*?<\/script>/g, '')), 'sin Wallet visible fuera del bloque de iPhone');
+  assert.match(html, /id="apple-tip"[^>]*hidden/);
+  assert.match(html, /iPhone\|iPad\|iPod/, 'el script lo muestra solo en iOS');
+  assert.ok(!html.includes('Agregar a Google Wallet'), 'sin botón de Google Wallet si no está configurado');
+});
+
+test('prueba de cámara: página de diagnóstico sin datos y con el mensaje de qué hacer', () => {
+  const h = env();
+  const html = h.ctx.gbCameraTestPage_().html;
+  for (const needle of ['Prueba de cámara', 'getUserMedia', 'La cámara funciona aquí', 'checkin/README.md', 'featurePolicy', 'window.top===window.self']) {
+    assert.ok(html.includes(needle), needle);
+  }
+  assert.ok(!/GB-\d|DPI|TokenQR/.test(html), 'no toca datos de miembros');
+});
+
+test('doGet: la prueba de cámara es pública, el resto sigue como antes', () => {
+  const src = readFileSync(new URL('../../code/Code.gs', import.meta.url), 'utf8');
+  assert.match(src, /e\.parameter\.page === 'camera'\) return gbCameraTestPage_\(\)/);
+  assert.ok(src.indexOf("page === 'camera'") < src.indexOf("page === 'admin'"), 'se evalúa antes del panel');
 });

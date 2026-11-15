@@ -33,7 +33,7 @@
 
     var modal = document.getElementById('cp-picker');
     document.getElementById('cp-picker-title').textContent = CP.picker.title;
-    document.getElementById('cp-picker-grid').innerHTML = '<div class="cp-picker-empty">Cargando…</div>';
+    document.getElementById('cp-picker-grid').innerHTML = gbSkeleton(3);
     modal.classList.add('is-open');
     modal.setAttribute('aria-hidden', 'false');
 

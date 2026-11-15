@@ -27,6 +27,18 @@ Es una carpeta aparte porque **la cámara no funciona dentro de páginas de Apps
 Solo los tablets conectados desde el panel pueden registrar asistencia. Si se pierde uno, **Revocar** en
 Ajustes lo deja sin acceso al instante.
 
+## ¿Por qué no en Google Sites ni en Apps Script?
+
+Las páginas de Apps Script y de Sites se muestran dentro de un marco aislado que bloquea la cámara. El escáner necesita la cámara, así que va como página independiente (esta carpeta). Sites solo puede tener un botón que la abra.
+
+Para comprobarlo en tu tablet abre `<URL del Web App>?page=camera` y pulsa el botón: si dice «La cámara funciona aquí», el escáner también podría servirse desde Apps Script.
+
+Otras opciones de alojamiento gratuito: Netlify Drop, Firebase Hosting.
+
+## Enlaces con dominio propio
+
+`link-core.js` y `v/index.html` permiten que los enlaces de carnet, comprobante y reporte usen tu dominio. Configuración en `DEPLOY.md`.
+
 ## Qué muestra
 
 * Verde: «¡Bienvenido, Ana!» (con aviso en ámbar si su mensualidad está vencida; nunca se le niega la entrada).

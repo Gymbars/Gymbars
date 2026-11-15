@@ -7,7 +7,7 @@
 
   function gbShowProgress() {
     var root = document.getElementById('gb-progress');
-    if (!root.getAttribute('data-loaded')) root.innerHTML = '<div class="cp-empty">Cargando…</div>';
+    if (!root.getAttribute('data-loaded')) root.innerHTML = gbSkeleton(6);
     gbCall('progress.overview', [], function (overview) {
       root.setAttribute('data-loaded', '1');
       gbRenderProgress(overview);
@@ -44,7 +44,7 @@
       attention = '<div class="cp-empty"><strong>Todo en orden</strong><p>Nadie necesita atención en este momento.</p></div>';
     } else {
       attention = '<div class="cp-gb-list">' + o.atencion.map(function (a) {
-        return '<button type="button" class="cp-gb-row" data-open="' + cpEsc(a.memberId) + '">' +
+        return '<button type="button" class="cp-gb-row" data-open="' + cpEsc(a.memberId) + '" data-name="' + cpEsc(a.nombre) + '">' +
           '<div><div class="cp-gb-name">' + cpEsc(a.nombre) + '</div><div class="cp-gb-sub">' + cpEsc(a.memberId) + '</div></div>' +
           '<div>' + (a.motivos.some(function (r) { return ['pago_vencido', 'sin_pagos', 'por_vencer'].indexOf(r.code) !== -1; }) ? '' : gbPagoChip(a.pago)) + '</div>' +
           '<div style="display:flex;gap:6px;flex-wrap:wrap">' + a.motivos.map(function (r) {
@@ -86,6 +86,6 @@
 
   document.addEventListener('click', function (e) {
     var row = e.target.closest('#gb-progress [data-open]');
-    if (row && typeof gbOpenMember === 'function') gbOpenMember(row.getAttribute('data-open'));
+    if (row && typeof gbOpenMember === 'function') gbOpenMember(row.getAttribute('data-open'), row.getAttribute('data-name'));
   });
 </script>

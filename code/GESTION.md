@@ -109,6 +109,14 @@ recordatorio (vence en ≤ N días), aviso de vencido (pasados los días de grac
 y ≥ N días sin asistir, **solo si el control de asistencia ya está en uso**) y seguimiento de medidas
 (solo a quien ya tiene medidas). *Ver qué se prepararía hoy* muestra el lote sin guardar nada.
 
+## Comportamiento común del panel
+
+- **Carga unificada:** una barra fina arriba (visible también sobre las ventanas), la zona activa se atenúa y los datos aparecen como esqueleto gris; no hay textos «Cargando…».
+- **Sin doble clic:** mientras una acción que guarda está en curso, la ventana queda bloqueada y una segunda petición idéntica se ignora.
+- **Avisos:** todo error o confirmación sale como aviso (toast); los errores inesperados del navegador también.
+- **Búsqueda de miembros:** filtra mientras escribes usando la lista en memoria (sin tildes ni mayúsculas, sin llamar al servidor). El entrenador no tiene el DPI completo en su lista: si escribe uno completo, el servidor lo busca. Mismo buscador en Miembros y Asistencia; Enter abre el primer resultado.
+- **Carnet:** el aviso de Wallet de Apple solo aparece en iPhone; el botón de Google Wallet solo si está configurado.
+
 ## Reglas de negocio (del Excel)
 
 * **Próximo pago**: el mismo día del mes siguiente (si no existe ese día, el último del mes).

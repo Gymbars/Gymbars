@@ -325,11 +325,17 @@
     background: rgba(150, 0, 0, 0.08);
   }
 
+  /* Barra de carga única: fija arriba, por encima de ventanas y menús. */
   .cp-progress {
-    flex: 0 0 3px;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 3000;
     height: 3px;
     background: transparent;
     overflow: hidden;
+    pointer-events: none;
   }
 
   .cp-progress.is-on {
@@ -2443,4 +2449,65 @@
     color: #3d2a00;
     background: repeating-linear-gradient(135deg, #F4C542, #F4C542 14px, #F7D56E 14px, #F7D56E 28px);
   }
+
+  /* ============================================================
+     Carga unificada: bloqueo con indicador, esqueletos y botones
+     ============================================================ */
+
+  /* Una acción que modifica datos bloquea su ventana o pestaña: no se puede hacer clic dos veces. */
+  .is-blocked { position: relative; pointer-events: none; }
+  .is-blocked::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 60;
+    background: rgba(255, 255, 255, 0.6);
+    border-radius: inherit;
+    opacity: 0;
+    animation: cp-fade-in 0.15s ease 0.18s forwards;      /* sin parpadeo en respuestas rápidas */
+  }
+  .is-blocked::after {
+    content: '';
+    position: absolute;
+    z-index: 61;
+    top: 50%;
+    left: 50%;
+    width: 30px;
+    height: 30px;
+    margin: -15px 0 0 -15px;
+    border: 3px solid rgba(14, 14, 83, 0.18);
+    border-top-color: var(--cp-navy);
+    border-radius: 50%;
+    opacity: 0;
+    animation: cp-spin 0.7s linear infinite, cp-fade-in 0.15s ease 0.18s forwards;
+  }
+  @keyframes cp-spin { to { transform: rotate(360deg); } }
+  @keyframes cp-fade-in { to { opacity: 1; } }
+
+  /* Esqueleto: el mismo aspecto de "cargando" en todas las pestañas y ventanas. */
+  .cp-skeleton { display: grid; gap: 10px; }
+  .cp-skeleton i {
+    display: block;
+    height: 54px;
+    border-radius: var(--cp-radius-sm);
+    background: linear-gradient(90deg, #ECEEF0 25%, #F6F7F8 37%, #ECEEF0 63%);
+    background-size: 400% 100%;
+    animation: cp-shimmer 1.3s ease infinite;
+  }
+  .cp-skeleton i:nth-child(3n) { height: 38px; width: 80%; }
+  @keyframes cp-shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
+
+  /* Buscador con icono y botón de borrar (mismo componente en todas las búsquedas). */
+  .cp-gb-searchbox { position: relative; }
+  .cp-gb-searchbox input[type="search"] { width: 100%; padding-left: 34px; padding-right: 34px; }
+  .cp-gb-searchbox input[type="search"]::-webkit-search-cancel-button { display: none; }
+  .cp-gb-search-icon {
+    position: absolute; left: 11px; top: 50%; width: 15px; height: 15px; margin-top: -7.5px;
+    fill: none; stroke: var(--cp-faint); stroke-width: 2; stroke-linecap: round; pointer-events: none;
+  }
+  .cp-gb-search-clear {
+    position: absolute; right: 6px; top: 50%; width: 24px; height: 24px; margin-top: -12px; padding: 0;
+    border: 0; border-radius: 50%; background: transparent; color: var(--cp-muted); font-size: 18px; line-height: 1; cursor: pointer;
+  }
+  .cp-gb-search-clear:hover { background: var(--cp-line); }
 </style>

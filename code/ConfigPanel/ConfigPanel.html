@@ -798,20 +798,24 @@
      */
     function cpRun(fn, args, handlers) {
       handlers = handlers || {};
-      var showBusy = handlers.busy !== false;
+      var isRead = handlers.busy === false;            // lecturas: solo la barra, sin bloquear
 
-      if (showBusy) {
-        cpBusy(true, typeof handlers.busy === 'string' ? handlers.busy : '');
-      }
+      // Un mismo envío que ya está en curso (doble clic) se ignora.
+      var key = isRead ? '' : fn + '|' + JSON.stringify(args || []);
+      if (key && CPL.inflight[key]) return;
+      if (key) CPL.inflight[key] = true;
+
+      var token = cpLoaderStart(!isRead, handlers.scope);
+      var finish = function () { cpLoaderEnd(token); if (key) delete CPL.inflight[key]; };
 
       google.script.run
         .withSuccessHandler(function (result) {
-          if (showBusy) cpBusy(false);
+          finish();
           if (handlers.ok) handlers.ok(result);
           else cpToast((result && result.message) || 'Listo.', 'ok');
         })
         .withFailureHandler(function (err) {
-          if (showBusy) cpBusy(false);
+          finish();
           var message = err && err.message ? err.message : 'No se pudo completar la acción.';
           if (cpHandleAuthError(message)) return;
           if (handlers.fail) handlers.fail(message);
@@ -820,6 +824,19 @@
         // Única puerta al servidor: valida sesión y rol en cada llamada (Api.gs).
         .gbApi(cpGetToken(), fn, args || []);
     }
+
+    // Cualquier error inesperado del navegador se avisa con un aviso (no se queda callado).
+    (function () {
+      var last = 0;
+      function notify() {
+        var now = Date.now();
+        if (now - last < 4000) return;
+        last = now;
+        try { cpToast('Ocurrió un error inesperado. Intenta de nuevo; si sigue, recarga la página.', 'error'); } catch (_) {}
+      }
+      window.addEventListener('error', notify);
+      window.addEventListener('unhandledrejection', notify);
+    })();
 
     /**
      * Guarda la pestaña actual, recarga los datos y vuelve a pintar sin
@@ -873,15 +890,67 @@
     // ===  Estado de carga y avisos  =============================
     // ============================================================
 
-    function cpBusy(on, text) {
-      document.body.classList.toggle('is-busy', !!on);
-      var progress = document.getElementById('cp-progress');
-      if (progress) progress.classList.toggle('is-on', !!on);
-      var save = document.getElementById('cp-save');
-      if (save) save.disabled = !!on;
+    // ------------------------------------------------------------
+    // Indicador de carga único (barra fija arriba + bloqueo de la ventana activa)
+    // ------------------------------------------------------------
+    // Lo usa TODA llamada al servidor, también las de las ventanas:
+    //   - lecturas (buscar, listar): solo la barra, sin bloquear nada;
+    //   - acciones que modifican datos: además bloquean la ventana o pestaña activa con un
+    //     indicador giratorio, y un segundo envío idéntico se ignora (no se duplica nada).
+    var CPL = { pending: 0, timer: null, inflight: {}, legacy: [] };
 
-      if (on && text) cpToast(text, 'loading', true, 'cp-loading-toast');
-      if (!on) cpDismiss('cp-loading-toast');
+    /** Elemento que se bloquea: el indicado, la ventana abierta más reciente o la pestaña activa. */
+    function cpLoaderScope(preferred) {
+      if (preferred) return preferred;
+      if (typeof GB !== 'undefined' && GB.modals && GB.modals.length) {
+        var top = GB.modals[GB.modals.length - 1].el.querySelector('.cp-gb-modal-card');
+        if (top) return top;
+      }
+      return document.getElementById('pane-' + CP.tab) || document.body;
+    }
+
+    function cpLoaderStart(block, scope) {
+      CPL.pending++;
+      if (!CPL.timer) {                       // la barra aparece a los 120 ms para no parpadear
+        CPL.timer = window.setTimeout(function () {
+          CPL.timer = null;
+          var bar = document.getElementById('cp-progress');
+          if (bar && CPL.pending > 0) bar.classList.add('is-on');
+        }, 120);
+      }
+      var token = { scope: null };
+      if (block) {
+        token.scope = cpLoaderScope(scope);
+        token.scope.__cplBlocks = (token.scope.__cplBlocks || 0) + 1;
+        token.scope.classList.add('is-blocked');
+        token.scope.setAttribute('aria-busy', 'true');
+      }
+      var save = document.getElementById('cp-save');
+      if (save) save.disabled = true;
+      return token;
+    }
+
+    function cpLoaderEnd(token) {
+      CPL.pending = Math.max(0, CPL.pending - 1);
+      var scope = token && token.scope;
+      if (scope) {
+        scope.__cplBlocks = Math.max(0, (scope.__cplBlocks || 1) - 1);
+        if (!scope.__cplBlocks) { scope.classList.remove('is-blocked'); scope.removeAttribute('aria-busy'); }
+      }
+      if (CPL.pending === 0) {
+        window.clearTimeout(CPL.timer);
+        CPL.timer = null;
+        var bar = document.getElementById('cp-progress');
+        if (bar) bar.classList.remove('is-on');
+        var save = document.getElementById('cp-save');
+        if (save) save.disabled = false;
+      }
+    }
+
+    /** Compatibilidad con las pestañas del sitio: bloquea el contenido mientras guardan. El texto ya no se muestra. */
+    function cpBusy(on) {
+      if (on) CPL.legacy.push(cpLoaderStart(true, document.getElementById('cp-body')));
+      else { var token = CPL.legacy.pop(); if (token) cpLoaderEnd(token); }
     }
 
     /**

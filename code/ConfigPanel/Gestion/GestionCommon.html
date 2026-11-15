@@ -14,15 +14,106 @@
 
   function gbIsAdmin() { return CP.role === 'Admin'; }
 
-  /** Llama a una acción del servidor. ok(resultado) se ejecuta si todo sale bien. */
+  /**
+   * Acciones que solo LEEN: muestran la barra de carga pero no bloquean nada.
+   * Todo lo demás modifica datos: además bloquea la ventana o pestaña activa y no admite doble envío.
+   */
+  var GB_READ_ACTIONS = {
+    'members.search': 1, 'members.get': 1, 'messages.list': 1, 'attendance.today': 1, 'attendance.history': 1,
+    'progress.overview': 1, 'automation.status': 1, 'automation.review': 1, 'devices.list': 1, 'config.get': 1,
+    'templates.list': 1, 'evaluations.catalog': 1, 'measurements.prefill': 1, 'wallet.carnet': 1
+  };
+
+  /**
+   * Llama a una acción del servidor. ok(resultado) se ejecuta si todo sale bien; si falla se avisa con un aviso
+   * (toast) salvo que se indique opts.fail. El indicador de carga y el bloqueo los maneja cpRun.
+   */
   function gbCall(action, args, ok, opts) {
     opts = opts || {};
     cpRun(action, args || [], {
-      busy: opts.busy === undefined ? false : opts.busy,
+      busy: GB_READ_ACTIONS[action] ? false : true,
+      scope: opts.scope,
       ok: ok,
       fail: opts.fail || function (message) { cpToast(message, 'error'); }
     });
   }
+
+  /** Esqueleto de carga (el mismo en todas las pestañas y ventanas; sin textos). */
+  function gbSkeleton(rows) {
+    var out = '<div class="cp-skeleton" role="status" aria-label="Cargando">';
+    for (var i = 0; i < (rows || 5); i++) out += '<i></i>';
+    return out + '</div>';
+  }
+
+  // ---------- Miembros en memoria y búsqueda instantánea ----------
+  // La lista completa se pide UNA vez (y se refresca sola) y se filtra en el navegador mientras se escribe:
+  // no hay una llamada al servidor por cada letra, así que la búsqueda es inmediata aunque el servidor tarde.
+
+  GB.members = { items: null, total: 0, at: 0, waiting: null };
+
+  /** Minúsculas y sin tildes (igual que gbSearchText_ en el servidor). */
+  function gbNorm(value) {
+    return String(value == null ? '' : value).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  }
+
+  /** Marca la lista como vieja para que se vuelva a pedir (tras guardar un pago, editar un miembro…). */
+  function gbInvalidateMembers() { GB.members.at = 0; }
+
+  /**
+   * Entrega la lista de miembros a cb. Si ya hay una en memoria la entrega al instante y, si tiene más de
+   * 30 s, la refresca en segundo plano y vuelve a llamar a cb con los datos nuevos.
+   */
+  function gbGetMembers(cb, opts) {
+    opts = opts || {};
+    var cache = GB.members;
+    var age = Date.now() - cache.at;
+    if (cache.items && !opts.force) {
+      cb(cache, false);
+      if (age < 30000) return;
+    }
+    if (cache.waiting) { cache.waiting.push(cb); return; }
+    cache.waiting = [cb];
+    gbCall('members.search', ['', {}], function (result) {
+      cache.items = result.items.map(function (m) {
+        // Texto en el que se busca: ID, nombre, teléfono y DPI (el DPI completo solo llega a un Admin).
+        m._h = gbNorm([m.memberId, m.nombre, m.telefono, m.dpi, m.dpiMasked, m.correo].join(' '));
+        return m;
+      });
+      cache.total = result.totalMiembros;
+      cache.at = Date.now();
+      var waiting = cache.waiting; cache.waiting = null;
+      waiting.forEach(function (f) { f(cache, true); });
+    }, { fail: function (message) { cache.waiting = null; cpToast(message, 'error'); } });
+  }
+
+  /** Filtra la lista en memoria: cada palabra debe aparecer; filters = { estado, pago }. */
+  function gbFilterMembers(items, query, filters) {
+    filters = filters || {};
+    var words = gbNorm(query).split(/\s+/).filter(Boolean);
+    return (items || []).filter(function (m) {
+      if (filters.estado && m.estado !== filters.estado) return false;
+      if (filters.pago && (!m.pago || m.pago.code !== filters.pago)) return false;
+      for (var i = 0; i < words.length; i++) if (m._h.indexOf(words[i]) === -1) return false;
+      return true;
+    });
+  }
+
+  /**
+   * Conecta un buscador (input + botón de borrar). onQuery(texto) se llama al escribir (sin esperar a Enter);
+   * onEnter(texto) al pulsar Enter.
+   */
+  function gbBindSearchBox(inputId, onQuery, onEnter) {
+    var input = document.getElementById(inputId);
+    var clear = document.getElementById(inputId + '-clear');
+    var sync = function () { if (clear) clear.hidden = !input.value; };
+    input.addEventListener('input', function () { sync(); onQuery(input.value); });
+    input.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); if (onEnter) onEnter(input.value); } });
+    if (clear) clear.addEventListener('click', function () { input.value = ''; sync(); onQuery(''); input.focus(); });
+    sync();
+  }
+
+  /** HTML del icono de lupa (el mismo en todos los buscadores). */
+  var GB_SEARCH_ICON = '<svg class="cp-gb-search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg>';
 
   function gbDebounce(fn, wait) {
     var timer = null;
@@ -279,6 +370,7 @@
       btn.disabled = true;
       gbCall(action, [id], function (result) {
         if (act === 'retry') cpToast(result.ok ? 'Correo enviado.' : 'No se pudo enviar el correo: ' + (result.error || ''), result.ok ? 'ok' : 'error');
+        if (act === 'discard') cpToast('Mensaje descartado.', 'ok');
         if (onChange) onChange(result.mensaje || null, act);
       }, { fail: function (msg) { btn.disabled = false; cpToast(msg, 'error'); } });
     });
@@ -318,7 +410,7 @@
 
   /** Crea un mensaje (carnet, reporte…) y muestra el resultado. */
   function gbQueueMessage(req, title) {
-    gbCall('messages.queue', [req], function (result) { gbShowQueued(result, title); }, { busy: 'Preparando mensaje…' });
+    gbCall('messages.queue', [req], function (result) { gbShowQueued(result, title); });
   }
 
   // ---------- Catálogo de evaluación ----------

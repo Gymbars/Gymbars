@@ -12,7 +12,11 @@
   <div class="cp-panel">
     <div class="cp-gb-section-head"><h3>Registrar a mano</h3></div>
     <p class="cp-hint" style="margin-bottom:10px">Si alguien olvidó su QR o el tablet no está, búscalo y registra su visita.</p>
-    <input type="search" id="gb-a-q" placeholder="Nombre, ID o teléfono" autocomplete="off" data-no-dirty style="width:100%">
+    <div class="cp-gb-searchbox">
+      <svg class="cp-gb-search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg>
+      <input type="search" id="gb-a-q" placeholder="Nombre, ID o teléfono" autocomplete="off" aria-label="Buscar miembro" data-no-dirty>
+      <button type="button" class="cp-gb-search-clear" id="gb-a-q-clear" aria-label="Borrar búsqueda" hidden>&times;</button>
+    </div>
     <div id="gb-a-results" style="margin-top:10px"></div>
   </div>
 </div>
@@ -39,7 +43,7 @@
 
   function gbLoadAttendance(silent) {
     var list = document.getElementById('gb-a-list');
-    if (!silent && !list.getAttribute('data-loaded')) list.innerHTML = '<div class="cp-empty">Cargando…</div>';
+    if (!silent && !list.getAttribute('data-loaded')) list.innerHTML = gbSkeleton(5);
     gbCall('attendance.today', [], function (r) {
       list.setAttribute('data-loaded', '1');
       document.getElementById('gb-a-stats').innerHTML =
@@ -53,7 +57,7 @@
       }
       list.innerHTML = '<div class="cp-gb-list">' + r.items.map(function (a) {
         var warn = a.estado === 'vencido' || a.estado === 'sin_pagos' || a.estado === 'gracia';
-        return '<button type="button" class="cp-gb-row" style="grid-template-columns:70px minmax(0,2fr) auto auto" data-open="' + cpEsc(a.memberId) + '">' +
+        return '<button type="button" class="cp-gb-row" style="grid-template-columns:70px minmax(0,2fr) auto auto" data-open="' + cpEsc(a.memberId) + '" data-name="' + cpEsc(a.nombre || '') + '">' +
           '<div class="cp-gb-name" style="font-variant-numeric:tabular-nums">' + cpEsc(a.hora) + '</div>' +
           '<div><div class="cp-gb-name">' + cpEsc(a.nombre || a.memberId) + '</div><div class="cp-gb-sub">' + cpEsc(a.memberId) + '</div></div>' +
           '<div><span class="cp-gb-chip ' + (a.origen === 'QR' ? 'is-info' : '') + '">' + (a.origen === 'QR' ? 'QR' : 'A mano') + '</span></div>' +
@@ -66,26 +70,31 @@
   document.getElementById('gb-a-refresh').addEventListener('click', function () { gbLoadAttendance(); });
   document.getElementById('gb-a-list').addEventListener('click', function (e) {
     var row = e.target.closest('[data-open]');
-    if (row) gbOpenMember(row.getAttribute('data-open'));
+    if (row) gbOpenMember(row.getAttribute('data-open'), row.getAttribute('data-name'));
   });
 
   // ---------- Registro manual ----------
 
-  document.getElementById('gb-a-q').addEventListener('input', gbDebounce(function (e) {
-    var q = e.target.value.trim();
+  // Búsqueda instantánea con la lista de miembros en memoria (la misma que usa la pestaña Miembros).
+  function gbAttendanceSearch(text) {
+    var q = text.trim();
     var box = document.getElementById('gb-a-results');
     if (q.length < 2) { box.innerHTML = ''; return; }
-    var seq = ++GBA.seq;
-    gbCall('members.search', [q, { estado: 'Activo' }], function (r) {
-      if (seq !== GBA.seq) return;
-      if (!r.items.length) { box.innerHTML = '<p class="cp-hint">No hay miembros activos con esa búsqueda.</p>'; return; }
-      box.innerHTML = '<div class="cp-gb-list">' + r.items.slice(0, 6).map(function (m) {
+    gbGetMembers(function (cache) {
+      if (document.getElementById('gb-a-q').value.trim() !== q) return;      // ya escribió otra cosa
+      var found = gbFilterMembers(cache.items, q, { estado: 'Activo' });
+      if (!found.length) { box.innerHTML = '<p class="cp-hint">No hay miembros activos con esa búsqueda.</p>'; return; }
+      box.innerHTML = '<div class="cp-gb-list">' + found.slice(0, 6).map(function (m) {
         return '<div class="cp-gb-row cp-gb-row--static" style="grid-template-columns:minmax(0,1fr) auto">' +
           '<div><div class="cp-gb-name">' + cpEsc(m.nombre) + '</div><div class="cp-gb-sub">' + gbPagoChip(m.pago) + '</div></div>' +
           '<button type="button" class="cp-btn cp-btn--primary cp-btn--small" data-visit="' + cpEsc(m.memberId) + '" data-name="' + cpEsc(m.nombre) + '">Registrar</button></div>';
-      }).join('') + '</div>';
+      }).join('') + '</div>' + (found.length > 6 ? '<p class="cp-hint" style="margin-top:6px">Hay ' + found.length + ' coincidencias: escribe más para afinar.</p>' : '');
     });
-  }, 250));
+  }
+  gbBindSearchBox('gb-a-q', gbAttendanceSearch, function () {
+    var btn = document.querySelector('#gb-a-results [data-visit]');       // Enter lleva al primer «Registrar»
+    if (btn) btn.focus();
+  });
 
   document.getElementById('gb-a-results').addEventListener('click', function (e) {
     var btn = e.target.closest('[data-visit]');
@@ -102,8 +111,9 @@
       }
       cpToast('Visita de ' + name + ' registrada.', 'ok');
       var q = document.getElementById('gb-a-q'); q.value = '';
+      document.getElementById('gb-a-q-clear').hidden = true;
       document.getElementById('gb-a-results').innerHTML = '';
       gbLoadAttendance(true);
-    }, { busy: true });
+    });
   }
 </script>

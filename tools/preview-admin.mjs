@@ -29,6 +29,7 @@ const USE_DEMO = process.argv.includes('--demo') || !fs.existsSync(path.join(ROO
 const OWNER = 'owner@gym.test';
 const COACH = 'coach@gym.test';
 let currentRole = 'admin';
+let lagMs = 0;            // retraso artificial de las respuestas (para ver cómo se comporta la interfaz con un servidor lento)
 
 // ---------------------------------------------------------------- backend en memoria
 
@@ -103,6 +104,7 @@ window.google = { script: { run: (function () {
       if (name === 'withFailureHandler') return function (fn) { return make(ok, fn); };
       return function () {
         var args = Array.prototype.slice.call(arguments);
+        (window.__rpcLog = window.__rpcLog || []).push(args.length > 1 ? String(args[1]) : String(name));
         fetch('/rpc', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fn: String(name), args: args }) })
           .then(function (r) { return r.json(); })
           .then(function (j) { if (j.ok) { if (ok) ok(j.result); } else if (fail) fail({ message: j.error }); })
@@ -152,9 +154,10 @@ http.createServer((req, res) => {
       const rel = url.pathname.replace(/^\/checkin\/?/, '') || 'index.html';
       if (rel === 'config.js') {
         res.writeHead(200, { 'Content-Type': 'text/javascript' });
-        return res.end(`window.GYMBARS_CONFIG = { apiUrl: 'http://localhost:${PORT}/exec' };`);
+        return res.end(`window.GYMBARS_CONFIG = { apiUrl: 'http://localhost:${PORT}/exec', allowLocal: true };`);
       }
-      const file = path.join(ROOT, 'checkin', path.normalize(rel).replace(/^(\.\.[/\\])+/, ''));
+      let file = path.join(ROOT, 'checkin', path.normalize(rel).replace(/^(\.\.[/\\])+/, ''));
+      if (fs.existsSync(file) && fs.statSync(file).isDirectory()) file = path.join(file, 'index.html');
       if (!file.startsWith(path.join(ROOT, 'checkin')) || !fs.existsSync(file)) { res.writeHead(404); return res.end('No encontrado'); }
       const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css' };
       res.writeHead(200, { 'Content-Type': types[path.extname(file)] || 'application/octet-stream' });
@@ -167,24 +170,35 @@ http.createServer((req, res) => {
       if (p.get('comprobante')) out = ctx.gbVoucherPage_(p.get('comprobante'));
       else if (p.get('reporte')) out = ctx.gbReportPage_(p.get('reporte'), p.get('m'), p.get('r'), p.get('s'));
       else if (p.get('carnet')) out = ctx.gbCarnetPage_(p.get('carnet'));
+      else if (p.get('page') === 'camera') out = ctx.gbCameraTestPage_();
       else { res.writeHead(404); return res.end('No encontrado'); }
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       return res.end(out.html);
+    }
+    if (req.method === 'GET' && url.pathname === '/__lag') {                 // /__lag?ms=800
+      lagMs = Math.max(0, Number(url.searchParams.get('ms')) || 0);
+      res.writeHead(200, { 'Content-Type': 'text/plain' });
+      return res.end('lag=' + lagMs);
     }
     if (req.method === 'POST' && url.pathname === '/rpc') {
       let body = '';
       req.on('data', chunk => { body += chunk; });
       req.on('end', () => {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
+        let payload;
         try {
           const { fn, args } = JSON.parse(body);
           if (!RPC_ALLOWED.has(fn)) throw new Error('Función no permitida: ' + fn);
           backend.g.setActiveUser(currentRole === 'coach' ? COACH : OWNER);
           const result = backend.ctx[fn](...(args || []));
-          res.end(JSON.stringify({ ok: true, result: result === undefined ? null : result }));
+          payload = { ok: true, result: result === undefined ? null : result };
         } catch (err) {
-          res.end(JSON.stringify({ ok: false, error: String(err && err.message || err) }));
+          payload = { ok: false, error: String(err && err.message || err) };
         }
+        // El servidor responde igual; solo se retrasa la entrega si se pidió un retraso (/__lag).
+        setTimeout(() => {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(payload));
+        }, lagMs);
       });
       return;
     }

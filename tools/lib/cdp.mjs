@@ -56,7 +56,9 @@ export async function launchChrome({ width = 1360, height = 900, mobile = false,
       msg.error ? reject(new Error(msg.error.message)) : resolve(msg.result);
     } else if (msg.method === 'Runtime.exceptionThrown') {
       const d = msg.params.exceptionDetails;
-      errors.push((d.exception && d.exception.description) || d.text);
+      const text = (d.exception && d.exception.description) || d.text;
+      if (/chrome-extension:\/\//.test(text) || /chrome-extension:\/\//.test(d.url || '')) return;   // extensiones del Chrome del usuario: no son de la página
+      errors.push(text);
     } else if (msg.method === 'Runtime.consoleAPICalled') {
       const text = msg.params.args.map(a => a.value !== undefined ? a.value : a.description).join(' ');
       logs.push(msg.params.type + ': ' + text);
