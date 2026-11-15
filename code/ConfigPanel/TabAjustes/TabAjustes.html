@@ -1,0 +1,222 @@
+<div class="cp-panel" id="gb-s-auto"><div class="cp-empty">Cargando…</div></div>
+<div class="cp-panel" id="gb-s-devices"></div>
+<div class="cp-panel" id="gb-s-config"></div>
+<div class="cp-panel">
+  <div class="cp-gb-section-head"><h3>Quién puede entrar al panel</h3></div>
+  <p class="cp-hint" style="font-size:12.5px;line-height:1.6">
+    Los accesos se manejan en la pestaña <b>Usuarios</b> de la hoja de cálculo (columnas <code>Email</code>, <code>Rol</code>, <code>Activo</code>).
+    El rol <b>Admin</b> puede todo; el rol <b>Coach</b> trabaja con miembros, medidas, evaluaciones, asistencia y mensajes, pero no ve montos de pagos
+    ni el DPI completo, y no puede cambiar el sitio web ni los ajustes. El propietario de la hoja siempre es Admin.
+    Mientras la pestaña Usuarios esté vacía, los editores de la hoja entran como Admin.
+  </p>
+</div>
+
+<script>
+  // ============================================================
+  // ===  Ajustes (solo Admin)  =================================
+  // ============================================================
+
+  var GBS = { status: null, devices: null, config: null };
+
+  function gbShowSettings() {
+    gbRefreshMessageBadge();
+    gbCall('automation.status', [], function (s) { GBS.status = s; gbRenderAutomation(); });
+    gbCall('devices.list', [], function (d) { GBS.devices = d; gbRenderDevices(); });
+    gbCall('config.get', [], function (c) { GBS.config = c; gbRenderConfig(); });
+  }
+
+  // ---------- Automatización ----------
+
+  function gbRenderAutomation() {
+    var s = GBS.status;
+    var box = document.getElementById('gb-s-auto');
+    box.innerHTML =
+      '<div class="cp-gb-section-head"><h3>Recordatorios y avisos automáticos</h3>' +
+        '<span class="cp-gb-chip ' + (s.activa ? 'is-ok' : '') + '">' + (s.activa ? 'Encendida' : 'Apagada') + '</span></div>' +
+      '<p class="cp-hint" style="font-size:12.5px;line-height:1.6;margin-bottom:12px">' +
+        'Cada día a las ' + s.hora + ':00 el sistema revisa a los miembros activos y deja mensajes <b>listos en la bandeja</b>: recordatorio de pago, aviso de pago vencido, ' +
+        'invitación a quien no viene hace días y seguimiento de medidas. <b>Nada sale solo por WhatsApp</b>: tú los envías con un toque. Los correos sí se envían solos.</p>' +
+      (!s.activa && s.porRevisar ? '<div class="cp-gb-note is-warn">Antes de encenderla, revisa los <b>' + s.porRevisar + '</b> miembros activos con la mensualidad vencida o sin pagos ' +
+        'y marca como inactivos a quienes ya no vienen. Si no, recibirás un aviso de pago por cada uno.</div>' : '') +
+      '<div class="cp-gb-kv" style="margin-bottom:14px">' +
+        '<div><dt>Proceso diario</dt><dd>' + (s.disparador ? 'Programado a las ' + s.hora + ':00' : '<span class="cp-gb-chip is-warn">No programado</span>') + '</dd></div>' +
+        '<div><dt>Mensajes pendientes</dt><dd>' + s.pendientes + '</dd></div>' +
+        '<div><dt>Correo automático</dt><dd>' + (s.emailActivo ? 'Sí' : 'No') + '</dd></div>' +
+        '<div><dt>Control de asistencia desde</dt><dd>' + (s.asistenciaDesde ? gbDate(s.asistenciaDesde) : '<span class="cp-hint">Aún no se usa</span>') + '</dd></div>' +
+      '</div>' +
+      '<div class="cp-toolbar" style="margin-bottom:0">' +
+        '<button type="button" class="cp-btn ' + (s.activa ? '' : 'cp-btn--primary') + '" id="gb-s-toggle">' + (s.activa ? 'Apagar' : 'Encender') + ' la automatización</button>' +
+        '<button type="button" class="cp-btn" id="gb-s-dry">Ver qué se prepararía hoy</button>' +
+        '<button type="button" class="cp-btn" id="gb-s-review">Revisar estados (' + s.porRevisar + ')</button>' +
+        '<button type="button" class="cp-btn" id="gb-s-run">Ejecutar ahora</button>' +
+        (s.disparador ? '' : '<button type="button" class="cp-btn" id="gb-s-install">Programar proceso diario</button>') +
+      '</div>';
+
+    document.getElementById('gb-s-toggle').onclick = function () {
+      gbCall('automation.setEnabled', [!s.activa], function (st) {
+        GBS.status = st; gbRenderAutomation();
+        cpToast(st.activa ? 'Automatización encendida. Mañana a las ' + st.hora + ':00 se prepara el primer lote.' : 'Automatización apagada.', 'ok');
+      }, { busy: true });
+    };
+    document.getElementById('gb-s-dry').onclick = gbShowDryRun;
+    document.getElementById('gb-s-review').onclick = gbShowReview;
+    document.getElementById('gb-s-run').onclick = function () {
+      gbConfirm('Se prepararán ahora los mensajes de hoy en la bandeja (no se envía nada por WhatsApp). ¿Continuar?', { title: 'Ejecutar ahora', okLabel: 'Ejecutar' }, function () {
+        gbCall('automation.run', [false], function (r) {
+          var created = Object.keys(r.creados || {}).reduce(function (n, k) { return n + r.creados[k]; }, 0);
+          cpToast(created + ' mensajes nuevos en la bandeja.' + (r.errores ? ' (' + r.errores + ' con error)' : ''), r.errores ? 'warn' : 'ok');
+          gbShowSettings();
+        }, { busy: 'Preparando mensajes…' });
+      });
+    };
+    var install = document.getElementById('gb-s-install');
+    if (install) install.onclick = function () {
+      gbCall('automation.install', [], function (r) { cpToast('Proceso diario programado a las ' + r.hora + ':00.', 'ok'); gbShowSettings(); }, { busy: true });
+    };
+  }
+
+  function gbShowDryRun() {
+    gbCall('automation.run', [true], function (r) {
+      var types = Object.keys(r.porTipo || {});
+      var body = !r.total
+        ? '<div class="cp-empty"><strong>Hoy no habría mensajes nuevos</strong><p>Nadie está por vencer, vencido ni inactivo, o ya se les avisó.</p></div>'
+        : '<p style="margin-bottom:12px;font-size:13px">Se prepararían <b>' + r.total + '</b> mensajes: ' +
+            types.map(function (t) { return (GB_TIPOS[t] || t) + ' (' + r.porTipo[t] + ')'; }).join(', ') + '.' +
+            (r.total > r.mostrados ? ' El primer lote es de ' + r.mostrados + '; el resto sigue en los días siguientes.' : '') + '</p>' +
+          '<table class="cp-gb-table"><tr><th>Miembro</th><th>Mensaje</th><th>Motivo</th></tr>' + r.items.map(function (i) {
+            return '<tr><td>' + cpEsc(i.nombre) + '</td><td>' + cpEsc(GB_TIPOS[i.type] || i.type) + '</td><td>' + cpEsc(i.motivo) + '</td></tr>';
+          }).join('') + '</table>';
+      gbModal({ title: 'Simulacro: no se envió ni se guardó nada', size: 'lg', body: body, autofocus: false,
+        foot: [{ label: 'Cerrar', onClick: function (h) { h.close(); } }] });
+    }, { busy: 'Calculando…' });
+  }
+
+  function gbShowReview() {
+    gbCall('automation.review', [], function (r) {
+      var body = !r.total
+        ? '<div class="cp-empty"><strong>Todo al día</strong><p>No hay miembros activos con la mensualidad vencida o sin pagos.</p></div>'
+        : '<p class="cp-hint" style="margin-bottom:10px">Marca a quienes ya no vienen y pásalos a <b>Inactivo</b>: dejarán de recibir avisos y salen de los pendientes. Podrás reactivarlos cuando vuelvan a pagar.</p>' +
+          '<div style="margin-bottom:8px"><button type="button" class="cp-btn cp-btn--small" id="gb-rv-all">Marcar los de más de 60 días</button></div>' +
+          '<div style="overflow-x:auto"><table class="cp-gb-table"><tr><th></th><th>Miembro</th><th>Estado</th><th>Último pago</th></tr>' + r.items.map(function (i) {
+            var days = i.pago.daysOverdue || 0;
+            return '<tr><td><input type="checkbox" class="gb-rv" value="' + cpEsc(i.memberId) + '" data-days="' + days + '" aria-label="Seleccionar ' + cpEsc(i.nombre) + '"></td>' +
+              '<td><b>' + cpEsc(i.nombre) + '</b><div class="cp-gb-sub">' + cpEsc(i.memberId) + '</div></td>' +
+              '<td>' + gbPagoChip(i.pago) + (days ? '<div class="cp-gb-sub">' + days + ' días de atraso</div>' : '') + '</td>' +
+              '<td>' + (i.ultimoPago ? gbDate(i.ultimoPago) : '<span class="cp-hint">Nunca</span>') + '</td></tr>';
+          }).join('') + '</table></div>';
+
+      var modal = gbModal({
+        title: 'Revisar estados (' + r.total + ')', size: 'lg', body: body, autofocus: false,
+        foot: [
+          { label: 'Cerrar', onClick: function (h) { h.close(); } },
+          r.total ? { label: 'Pasar seleccionados a inactivo', kind: 'primary', onClick: function (h) {
+            var ids = Array.prototype.map.call(h.body.querySelectorAll('.gb-rv:checked'), function (c) { return c.value; });
+            if (!ids.length) { cpToast('Marca al menos un miembro.', 'warn'); return; }
+            gbCall('members.bulkStatus', [ids, 'Inactivo'], function (res) {
+              h.close(); cpToast(res.cambiados + ' miembros pasaron a inactivo.', 'ok'); GBM.loaded = false; gbShowSettings();
+            }, { busy: true });
+          } } : { label: ' ', onClick: function () {} }
+        ].filter(function (b) { return b.label.trim(); })
+      });
+      var all = modal.body.querySelector('#gb-rv-all');
+      if (all) all.onclick = function () {
+        Array.prototype.forEach.call(modal.body.querySelectorAll('.gb-rv'), function (c) { c.checked = Number(c.getAttribute('data-days')) > 60 || c.getAttribute('data-days') === '0'; });
+      };
+    }, { busy: 'Cargando…' });
+  }
+
+  // ---------- Tablets de asistencia ----------
+
+  function gbRenderDevices() {
+    var d = GBS.devices;
+    var box = document.getElementById('gb-s-devices');
+    box.innerHTML =
+      '<div class="cp-gb-section-head"><h3>Tablets de asistencia (QR)</h3>' +
+        '<button type="button" class="cp-btn cp-btn--primary cp-btn--small" id="gb-s-pair">Conectar un tablet</button></div>' +
+      '<p class="cp-hint" style="font-size:12.5px;line-height:1.6;margin-bottom:12px">' +
+        'Solo los tablets conectados aquí pueden registrar asistencia. Cada miembro muestra su QR (su carnet) y el tablet lo escanea. ' +
+        (d.scannerUrl ? 'Página del escáner: <a href="' + cpEsc(d.scannerUrl) + '" target="_blank" rel="noopener">' + cpEsc(d.scannerUrl) + '</a>.'
+          : '<b>Falta la dirección de la página del escáner</b> (ver «Configuración» más abajo).') + '</p>' +
+      (d.items.length
+        ? '<div class="cp-gb-list">' + d.items.map(function (x) {
+            return '<div class="cp-gb-row cp-gb-row--static" style="grid-template-columns:minmax(0,1.5fr) minmax(0,1fr) auto">' +
+              '<div><div class="cp-gb-name">' + cpEsc(x.nombre) + '</div><div class="cp-gb-sub">' + cpEsc(x.id) + '</div></div>' +
+              '<div class="cp-gb-sub">' + (x.ultimoUso ? 'Último uso ' + cpEsc(gbDate(x.ultimoUso.slice(0, 10)) + ' ' + x.ultimoUso.slice(11, 16)) : 'Sin uso todavía') + '</div>' +
+              '<div class="cp-gb-cell-end">' + (x.activo ? '<span class="cp-gb-chip is-ok">Activo</span><button type="button" class="cp-btn cp-btn--small cp-btn--danger" data-revoke="' + cpEsc(x.id) + '">Revocar</button>'
+                : '<span class="cp-gb-chip">Revocado</span>') + '</div></div>';
+          }).join('') + '</div>'
+        : '<div class="cp-empty"><strong>Todavía no hay tablets conectados</strong><p>Conecta el tablet de la entrada para empezar a registrar asistencia.</p></div>');
+
+    document.getElementById('gb-s-pair').onclick = gbPairDialog;
+    Array.prototype.forEach.call(box.querySelectorAll('[data-revoke]'), function (b) {
+      b.onclick = function () {
+        gbConfirm('El tablet dejará de poder registrar asistencia. Podrás conectarlo de nuevo con un código nuevo.', { title: 'Revocar tablet', danger: true, okLabel: 'Revocar' }, function () {
+          gbCall('devices.revoke', [b.getAttribute('data-revoke')], function () { cpToast('Tablet revocado.', 'ok'); gbShowSettings(); }, { busy: true });
+        });
+      };
+    });
+  }
+
+  function gbPairDialog() {
+    gbModal({
+      title: 'Conectar un tablet', size: 'sm', body: gbField({ name: 'nombre', label: 'Nombre del tablet', placeholder: 'Por ejemplo: Recepción' }),
+      foot: [
+        { label: 'Cancelar', onClick: function (h) { h.close(); } },
+        { label: 'Generar código', kind: 'primary', onClick: function (h) {
+          var name = gbFormData(h.body).nombre;
+          gbCall('devices.createPairing', [name], function (r) {
+            h.close();
+            gbModal({
+              title: 'Código para el tablet', size: 'sm', autofocus: false,
+              body: '<p style="font-size:13px;line-height:1.55">En el tablet abre la página del escáner' + (r.scannerUrl ? ' (<b>' + cpEsc(r.scannerUrl) + '</b>)' : '') +
+                ' y escribe este código. Vale <b>' + r.minutos + ' minutos</b> y sirve una sola vez.</p><div class="cp-gb-code">' + cpEsc(r.code) + '</div>' +
+                '<p class="cp-hint">Cuando el tablet quede conectado aparecerá en la lista.</p>',
+              foot: [{ label: 'Listo', kind: 'primary', onClick: function (m) { m.close(); gbShowSettings(); } }]
+            });
+          }, { busy: true });
+        } }
+      ]
+    });
+  }
+
+  // ---------- Configuración ----------
+
+  function gbRenderConfig() {
+    var c = GBS.config;
+    var box = document.getElementById('gb-s-config');
+    var keys = Object.keys(c.reglas);
+    box.innerHTML = '<div class="cp-gb-section-head"><h3>Configuración</h3>' +
+      '<button type="button" class="cp-btn cp-btn--small" id="gb-s-tpl">Plantillas de mensajes</button></div>' +
+      '<div class="cp-gb-form" id="gb-s-form">' + keys.map(function (k) {
+        var rule = c.reglas[k];
+        var attrs = rule.type === 'int' ? 'type="number" min="' + rule.min + '" max="' + rule.max + '" step="1" inputmode="numeric"' : '';
+        if (rule.type === 'flag') {
+          return gbField({ name: k, label: rule.label, type: 'select', value: c.valores[k] === 'SI' ? 'SI' : 'NO', options: [['SI', 'Sí'], ['NO', 'No']] });
+        }
+        return gbField({ name: k, label: rule.label, type: rule.type === 'int' ? 'number' : 'text', value: c.valores[k],
+          attrs: rule.type === 'int' ? 'min="' + rule.min + '" max="' + rule.max + '" step="1" inputmode="numeric"' : (rule.type === 'digits' ? 'inputmode="numeric" maxlength="' + rule.max + '"' : '') });
+      }).join('') + '</div>' +
+      '<div class="cp-toolbar" style="margin:16px 0 0"><button type="button" class="cp-btn cp-btn--primary" id="gb-s-save">Guardar configuración</button></div>';
+
+    document.getElementById('gb-s-tpl').onclick = gbTemplatesEditor;
+    document.getElementById('gb-s-save').onclick = function () {
+      var form = document.getElementById('gb-s-form');
+      var data = gbFormData(form);
+      var changed = keys.filter(function (k) { return String(data[k]) !== String(c.valores[k]); });
+      if (!changed.length) { cpToast('No hay cambios.', 'ok'); return; }
+      gbSetErrors(form, {});
+      var errors = {}, done = 0;
+      (function next(i) {
+        if (i >= changed.length) {
+          if (Object.keys(errors).length) { gbSetErrors(form, errors); cpToast('Algunos valores no son válidos.', 'warn'); }
+          else { cpToast('Configuración guardada.', 'ok'); }
+          gbShowSettings();
+          return;
+        }
+        var k = changed[i];
+        gbCall('config.set', [k, data[k]], function () { done++; next(i + 1); },
+          { busy: true, fail: function (msg) { errors[k] = msg; next(i + 1); } });
+      })(0);
+    };
+  }
+</script>

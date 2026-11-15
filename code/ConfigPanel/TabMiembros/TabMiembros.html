@@ -1,0 +1,494 @@
+<div class="cp-toolbar">
+  <input type="search" id="gb-m-q" class="cp-gb-search" placeholder="Buscar por nombre, ID, DPI o teléfono" autocomplete="off" data-no-dirty>
+  <select id="gb-m-estado" class="cp-gb-select" data-no-dirty aria-label="Filtrar por estado">
+    <option value="">Todos los estados</option>
+    <option value="Activo">Activos</option>
+    <option value="Inactivo">Inactivos</option>
+    <option value="Suspendido">Suspendidos</option>
+  </select>
+  <select id="gb-m-pago" class="cp-gb-select" data-no-dirty aria-label="Filtrar por pago">
+    <option value="">Todos los pagos</option>
+    <option value="al_dia">Al día</option>
+    <option value="por_vencer">Por vencer</option>
+    <option value="gracia">En gracia</option>
+    <option value="vencido">Vencidos</option>
+    <option value="sin_pagos">Sin pagos</option>
+  </select>
+  <span class="cp-spacer"></span>
+  <button type="button" class="cp-btn cp-btn--primary" id="gb-m-new">Nuevo miembro</button>
+</div>
+<div id="gb-m-summary" class="cp-gb-summary"></div>
+<div id="gb-m-list"></div>
+<datalist id="gb-fees"></datalist>
+
+<script>
+  // ============================================================
+  // ===  Miembros: lista, ficha y formularios  =================
+  // ============================================================
+
+  var GBM = { query: '', estado: '', pago: '', loaded: false, seq: 0, open: null };
+
+  function gbShowMembers() {
+    gbRefreshMessageBadge();
+    if (!GBM.loaded) gbMembersSearch();
+  }
+
+  // ---------- Lista ----------
+
+  function gbMembersSearch() {
+    var seq = ++GBM.seq;
+    gbCall('members.search', [GBM.query, { estado: GBM.estado, pago: GBM.pago }], function (result) {
+      if (seq !== GBM.seq) return;           // llegó una respuesta vieja
+      GBM.loaded = true;
+      gbRenderMembers(result);
+    });
+  }
+
+  function gbRenderMembers(result) {
+    var list = document.getElementById('gb-m-list');
+    var summary = document.getElementById('gb-m-summary');
+    var filtered = GBM.query || GBM.estado || GBM.pago;
+    summary.innerHTML = '<span><b>' + result.total + '</b> ' + (result.total === 1 ? 'miembro' : 'miembros') +
+      (filtered ? ' (de ' + result.totalMiembros + ')' : '') + '</span>';
+
+    if (!result.items.length) {
+      list.innerHTML = '<div class="cp-empty"><strong>' + (filtered ? 'Sin resultados' : 'Todavía no hay miembros') + '</strong>' +
+        '<p>' + (filtered ? 'Prueba con otra búsqueda o quita los filtros.' : 'Agrega al primero con «Nuevo miembro».') + '</p></div>';
+      return;
+    }
+
+    list.innerHTML = '<div class="cp-gb-list">' + result.items.map(function (m) {
+      return '<button type="button" class="cp-gb-row" data-member="' + cpEsc(m.memberId) + '">' +
+        '<div><div class="cp-gb-name">' + cpEsc(m.nombre) + '</div>' +
+          '<div class="cp-gb-sub">' + cpEsc(m.memberId) + (m.edad !== '' ? ' · ' + m.edad + ' años' : '') + '</div></div>' +
+        '<div class="cp-gb-sub" style="font-size:12.5px;color:var(--cp-text)">' + cpEsc(m.telefono.replace(/^(\d{4})(\d{4})$/, '$1-$2')) + '</div>' +
+        '<div>' + gbPagoChip(m.pago) + '<div class="cp-gb-sub">' + cpEsc(gbVenceTexto(m.pago)) + '</div></div>' +
+        '<div class="cp-gb-cell-end">' + (m.estado === 'Activo' ? '' : gbEstadoChip(m.estado)) + '</div>' +
+      '</button>';
+    }).join('') + '</div>';
+  }
+
+  document.getElementById('gb-m-q').addEventListener('input', gbDebounce(function (e) {
+    GBM.query = e.target.value; gbMembersSearch();
+  }, 250));
+  document.getElementById('gb-m-estado').addEventListener('change', function (e) { GBM.estado = e.target.value; gbMembersSearch(); });
+  document.getElementById('gb-m-pago').addEventListener('change', function (e) { GBM.pago = e.target.value; gbMembersSearch(); });
+  document.getElementById('gb-m-new').addEventListener('click', function () { gbMemberForm(null); });
+  document.getElementById('gb-m-list').addEventListener('click', function (e) {
+    var row = e.target.closest('[data-member]');
+    if (row) gbOpenMember(row.getAttribute('data-member'));
+  });
+  document.getElementById('gb-fees').innerHTML = GB.fees.map(function (f) { return '<option value="' + f + '"></option>'; }).join('');
+
+  // ---------- Ficha ----------
+
+  /** Abre la ficha de un miembro (también la usan Progreso y Asistencia). */
+  function gbOpenMember(memberId) {
+    if (GBM.open && GBM.open.modal) GBM.open.modal.close();
+    var modal = gbModal({
+      title: 'Cargando…', size: 'lg', autofocus: false,
+      body: '<div class="cp-empty">Cargando ficha…</div>',
+      onClose: function () { GBM.open = null; }
+    });
+    GBM.open = { memberId: memberId, modal: modal, data: null };
+    gbReloadFicha();
+    modal.el.addEventListener('click', gbFichaClick);
+  }
+
+  function gbReloadFicha(then) {
+    var open = GBM.open;
+    if (!open) return;
+    gbCall('members.get', [open.memberId], function (d) {
+      if (GBM.open !== open) return;
+      open.data = d;
+      gbRenderFicha(d);
+      if (then) then(d);
+    }, { fail: function (msg) { cpToast(msg, 'error'); open.modal.close(); } });
+  }
+
+  function gbDeltaText(now, before, unit) {
+    if (before === '' || before == null || now === '' || now == null) return '';
+    var d = Math.round((now - before) * 10) / 10;
+    if (d === 0) return '<span class="cp-hint">sin cambio</span>';
+    return '<span class="cp-hint">' + (d > 0 ? '+' : '−') + Math.abs(d) + ' ' + unit + '</span>';
+  }
+
+  function gbRenderFicha(d) {
+    var m = d.member;
+    var admin = gbIsAdmin();
+    var open = GBM.open;
+    open.modal.setTitle(m.nombre);
+
+    var lastPay = admin && d.pagos && d.pagos.length ? d.pagos[0] : null;
+    var kv = [
+      ['ID', cpEsc(m.memberId)],
+      ['DPI', cpEsc(admin ? m.dpi : m.dpiMasked)],
+      ['Teléfono', cpEsc(m.telefono.replace(/^(\d{4})(\d{4})$/, '$1-$2')) + (m.telefonoWa ? '' : ' <span class="cp-gb-chip is-warn">sin WhatsApp</span>')],
+      ['Correo', m.correo ? cpEsc(m.correo) : '<span class="cp-hint">—</span>'],
+      ['Edad', m.edad !== '' ? m.edad + ' años <span class="cp-hint">(' + gbDate(m.fechaNacimiento) + ')</span>' : '—'],
+      ['Género', cpEsc(m.genero)],
+      ['Mensualidad', gbMoney(m.mensualidad) + (m.diaPago ? ' <span class="cp-hint">· el día ' + m.diaPago + '</span>' : ' <span class="cp-hint">· sin día de pago</span>')],
+      ['Próximo pago', d.pago.nextDue ? gbDate(d.pago.nextDue) + ' ' + gbPagoChip(d.pago) : gbPagoChip(d.pago)],
+      lastPay ? ['Último pago', gbMoney(lastPay.monto) + ' <span class="cp-hint">· ' + gbDate(lastPay.fecha) + '</span>'] : null,
+      ['Asistencia', d.asistencia.total
+        ? 'Última visita ' + gbDate(d.asistencia.ultima) + ' <span class="cp-hint">· ' + gbPlural(d.asistencia.ultimos30dias, 'visita', 'visitas') + ' en 30 días</span>'
+        : '<span class="cp-hint">Sin visitas registradas</span>'],
+      ['Miembro desde', gbDate(m.fechaRegistro) || '—']
+    ].filter(Boolean);
+
+    var actions =
+      '<div class="cp-toolbar" style="margin-bottom:6px">' +
+        (admin ? '<button type="button" class="cp-btn cp-btn--primary" data-act="pay">Registrar pago</button>' : '') +
+        '<button type="button" class="cp-btn" data-act="measure">Medidas</button>' +
+        '<button type="button" class="cp-btn" data-act="eval">Evaluación</button>' +
+        '<button type="button" class="cp-btn" data-act="visit">Registrar visita</button>' +
+        '<button type="button" class="cp-btn" data-act="send">Enviar mensaje</button>' +
+      '</div>';
+
+    var paymentsHtml = '';
+    if (admin) {
+      paymentsHtml = '<div class="cp-gb-section"><div class="cp-gb-section-head"><h3>Pagos (' + d.pagos.length + ')</h3></div>' +
+        (d.pagos.length ? '<table class="cp-gb-table"><tr><th>Fecha</th><th class="num">Monto</th><th>Nota</th><th></th></tr>' +
+          d.pagos.slice(0, 8).map(function (p) {
+            return '<tr><td>' + gbDate(p.fecha) + '</td><td class="num">' + gbMoney(p.monto) + '</td><td>' + cpEsc(p.nota) + '</td>' +
+              '<td class="num"><button type="button" class="cp-btn cp-btn--ghost cp-btn--small" data-act="void" data-id="' + cpEsc(p.pagoId) + '">Anular</button> ' +
+              '<button type="button" class="cp-btn cp-btn--ghost cp-btn--small" data-act="voucher" data-id="' + cpEsc(p.pagoId) + '">Boleta</button></td></tr>';
+          }).join('') + '</table>' + (d.pagos.length > 8 ? '<p class="cp-hint">Mostrando los 8 más recientes de ' + d.pagos.length + '.</p>' : '')
+          : '<p class="cp-hint">Todavía no hay pagos.</p>') + '</div>';
+    }
+
+    var med = d.medidas;
+    var measureHtml = '<div class="cp-gb-section"><div class="cp-gb-section-head"><h3>Medidas (' + med.length + ')</h3>' +
+      (med.length ? '<button type="button" class="cp-btn cp-btn--small" data-act="send-measure">Enviar reporte</button>' : '') + '</div>';
+    if (med.length) {
+      var now = med[0], before = med[1];
+      var weightSeries = med.slice().reverse().map(function (x) { return x.pesoLb; });
+      measureHtml += '<div class="cp-gb-kv" style="margin-bottom:12px">' +
+        [['Peso', 'pesoLb', 'lb'], ['Cintura', 'cintura', 'cm'], ['Pecho', 'pecho', 'cm'], ['Cadera', 'cadera', 'cm']].map(function (f) {
+          return '<div><dt>' + f[0] + '</dt><dd>' + now[f[1]] + ' ' + f[2] + ' ' + gbDeltaText(now[f[1]], before ? before[f[1]] : null, f[2]) + '</dd></div>';
+        }).join('') + '</div>' + (weightSeries.length > 1 ? '<div style="max-width:320px">' + gbSpark(weightSeries) + '<div class="cp-hint">Evolución del peso</div></div>' : '') +
+        '<div style="overflow-x:auto"><table class="cp-gb-table"><tr><th>Fecha</th><th class="num">Peso</th><th class="num">Cuello</th><th class="num">Pecho</th><th class="num">Brazo D</th><th class="num">Brazo I</th><th class="num">Cintura</th><th class="num">Cadera</th><th class="num">Pierna D</th><th class="num">Pierna I</th><th></th></tr>' +
+        med.slice(0, 6).map(function (x) {
+          return '<tr><td>' + gbDate(x.fecha) + '</td><td class="num">' + x.pesoLb + '</td><td class="num">' + x.cuello + '</td><td class="num">' + x.pecho + '</td><td class="num">' + x.brazoDer + '</td><td class="num">' +
+            x.brazoIzq + '</td><td class="num">' + x.cintura + '</td><td class="num">' + x.cadera + '</td><td class="num">' + x.piernaDer + '</td><td class="num">' + x.piernaIzq + '</td>' +
+            '<td class="num"><button type="button" class="cp-btn cp-btn--ghost cp-btn--small" data-act="rm-measure" data-id="' + cpEsc(x.medidaId) + '">Quitar</button></td></tr>';
+        }).join('') + '</table></div>';
+    } else {
+      measureHtml += '<p class="cp-hint">Todavía no hay medidas registradas.</p>';
+    }
+    measureHtml += '</div>';
+
+    var evals = d.evaluaciones;
+    var evalHtml = '<div class="cp-gb-section"><div class="cp-gb-section-head"><h3>Evaluaciones (' + evals.length + ')</h3>' +
+      (evals.length ? '<button type="button" class="cp-btn cp-btn--small" data-act="send-eval">Enviar evaluación</button>' : '') + '</div>';
+    if (evals.length) {
+      evalHtml += evals.slice(0, 4).map(function (e) {
+        return '<div style="margin-bottom:14px"><div class="cp-gb-section-head" style="margin-bottom:4px"><b style="font-size:12.5px">' + gbDate(e.fecha) + '</b>' +
+          '<button type="button" class="cp-btn cp-btn--ghost cp-btn--small" data-act="rm-eval" data-id="' + cpEsc(e.evalId) + '">Quitar</button></div>' +
+          '<div class="cp-gb-kv" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">' + [0, 1, 2, 3].map(function (l) {
+            var s = e.puntajes['n' + l];
+            var pct = s === '' ? 0 : Math.round(s * 100);
+            return '<div><dt>Nivel ' + l + '</dt><dd>' + (s === '' ? '—' : pct + ' %') + '</dd><div class="cp-gb-bar"><i style="width:' + Math.min(pct, 100) + '%"></i></div></div>';
+          }).join('') + '</div></div>';
+      }).join('');
+    } else {
+      evalHtml += '<p class="cp-hint">Todavía no hay evaluaciones.</p>';
+    }
+    evalHtml += '</div>';
+
+    var footer =
+      '<div class="cp-gb-section" style="display:flex;gap:8px;flex-wrap:wrap;border-top:1px solid var(--cp-line);padding-top:14px">' +
+        '<button type="button" class="cp-btn" data-act="edit">Editar datos</button>' +
+        (m.estado === 'Activo'
+          ? '<button type="button" class="cp-btn" data-act="status" data-to="Inactivo">Marcar como inactivo</button>' +
+            '<button type="button" class="cp-btn" data-act="status" data-to="Suspendido">Suspender</button>'
+          : '<button type="button" class="cp-btn cp-btn--primary" data-act="status" data-to="Activo">Reactivar</button>') +
+        (admin ? '<span class="cp-spacer"></span><button type="button" class="cp-btn cp-btn--danger" data-act="delete">Eliminar</button>' : '') +
+      '</div>';
+
+    open.modal.body.innerHTML =
+      '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">' + gbEstadoChip(m.estado) + gbPagoChip(d.pago) +
+        '<span class="cp-hint">' + cpEsc(gbVenceTexto(d.pago)) + '</span></div>' +
+      actions +
+      '<div class="cp-gb-section"><div class="cp-gb-section-head"><h3>Datos</h3></div><dl class="cp-gb-kv">' +
+        kv.map(function (r) { return '<div><dt>' + r[0] + '</dt><dd>' + r[1] + '</dd></div>'; }).join('') + '</dl>' +
+        (m.notas ? '<p class="cp-hint" style="margin-top:10px">Notas: ' + cpEsc(m.notas) + '</p>' : '') + '</div>' +
+      paymentsHtml + measureHtml + evalHtml + footer;
+  }
+
+  function gbFichaClick(e) {
+    var btn = e.target.closest('[data-act]');
+    if (!btn || !GBM.open || !GBM.open.data) return;
+    var d = GBM.open.data, m = d.member, id = btn.getAttribute('data-id');
+    var act = btn.getAttribute('data-act');
+
+    if (act === 'pay') gbPaymentForm(m);
+    else if (act === 'measure') gbMeasureForm(m);
+    else if (act === 'eval') gbEvalForm(m);
+    else if (act === 'visit') gbRegisterVisit(m);
+    else if (act === 'send') gbSendMenu(d);
+    else if (act === 'edit') gbMemberForm(m);
+    else if (act === 'send-measure') gbQueueMessage({ type: 'medidas', memberId: m.memberId, force: true }, 'Reporte de medidas');
+    else if (act === 'send-eval') gbQueueMessage({ type: 'evaluacion', memberId: m.memberId, force: true }, 'Evaluación física');
+    else if (act === 'voucher') gbQueueMessage({ type: 'boleta', memberId: m.memberId, paymentId: id, force: true }, 'Boleta de pago');
+    else if (act === 'void') {
+      gbConfirm('¿Anular este pago? Se borra del historial y cambia la fecha de próximo pago.', { title: 'Anular pago', danger: true, okLabel: 'Anular' }, function () {
+        gbCall('payments.void', [id], function () { cpToast('Pago anulado.', 'ok'); gbAfterChange(); }, { busy: true });
+      });
+    } else if (act === 'rm-measure') {
+      gbConfirm('¿Quitar este registro de medidas?', { title: 'Quitar medidas', danger: true, okLabel: 'Quitar' }, function () {
+        gbCall('measurements.remove', [id], function () { cpToast('Registro quitado.', 'ok'); gbAfterChange(); }, { busy: true });
+      });
+    } else if (act === 'rm-eval') {
+      gbConfirm('¿Quitar esta evaluación?', { title: 'Quitar evaluación', danger: true, okLabel: 'Quitar' }, function () {
+        gbCall('evaluations.remove', [id], function () { cpToast('Evaluación quitada.', 'ok'); gbAfterChange(); }, { busy: true });
+      });
+    } else if (act === 'status') {
+      var to = btn.getAttribute('data-to');
+      gbCall('members.setStatus', [m.memberId, to], function () { cpToast('Estado: ' + to + '.', 'ok'); gbAfterChange(); }, { busy: true });
+    } else if (act === 'delete') gbDeleteMember(m);
+  }
+
+  /** Refresca la ficha abierta y la lista detrás de ella. */
+  function gbAfterChange() {
+    gbReloadFicha();
+    if (GBM.loaded) gbMembersSearch();
+  }
+
+  // ---------- Enviar mensaje ----------
+
+  function gbSendMenu(d) {
+    var m = d.member;
+    var items = [
+      ['carnet', 'Carnet con QR', 'Su código personal para registrar asistencia.', true],
+      ['medidas', 'Reporte de medidas', 'Enlace con la evolución de sus medidas.', d.medidas.length > 0],
+      ['evaluacion', 'Evaluación física', 'Enlace con su último resultado por nivel.', d.evaluaciones.length > 0],
+      ['boleta', 'Boleta del último pago', 'Enlace con su comprobante.', gbIsAdmin() && d.pagos && d.pagos.length > 0],
+      ['recordatorio_pago', 'Recordatorio de pago', 'Aviso amable de su próxima mensualidad.', d.pago.code !== 'sin_pagos'],
+      ['pago_vencido', 'Aviso de pago vencido', 'Para quien ya pasó su fecha de pago.', d.pago.code !== 'sin_pagos'],
+      ['inactividad', 'Te extrañamos', 'Para quien lleva días sin venir.', true],
+      ['progreso', 'Seguimiento de progreso', 'Invita a registrar medidas.', d.medidas.length > 0]
+    ].filter(function (r) { return r[3]; });
+
+    var modal = gbModal({
+      title: 'Enviar a ' + m.nombre.split(' ')[0], size: 'sm', autofocus: false,
+      body: '<div class="cp-gb-list">' + items.map(function (r) {
+        return '<button type="button" class="cp-gb-row" style="grid-template-columns:1fr" data-type="' + r[0] + '">' +
+          '<div><div class="cp-gb-name">' + cpEsc(r[1]) + '</div><div class="cp-gb-sub">' + cpEsc(r[2]) + '</div></div></button>';
+      }).join('') + '</div>',
+      foot: [{ label: 'Cancelar', onClick: function (h) { h.close(); } }]
+    });
+    modal.el.addEventListener('click', function (e) {
+      var row = e.target.closest('[data-type]');
+      if (!row) return;
+      var type = row.getAttribute('data-type');
+      modal.close();
+      gbQueueMessage({ type: type, memberId: m.memberId, force: true }, GB_TIPOS[type]);
+    });
+  }
+
+  // ---------- Visita manual ----------
+
+  function gbRegisterVisit(m, force) {
+    gbCall('attendance.manual', [m.memberId, !!force], function (r) {
+      if (r.status === 'duplicado') {
+        gbConfirm(m.nombre + ' ya tiene una visita registrada hoy a las ' + r.hora + '. ¿Registrar otra?', { title: 'Visita repetida', okLabel: 'Registrar otra' }, function () { gbRegisterVisit(m, true); });
+        return;
+      }
+      cpToast('Visita registrada a las ' + r.hora + '.', 'ok');
+      gbReloadFicha();
+    }, { busy: true });
+  }
+
+  // ---------- Formulario: miembro ----------
+
+  function gbMemberForm(member) {
+    var isNew = !member;
+    var admin = gbIsAdmin();
+    var m = member || { nombres: '', apellidos: '', dpi: '', fechaNacimiento: '', telefono: '', correo: '', genero: '', mensualidad: '', diaPago: new Date().getDate(), estado: 'Activo', notas: '' };
+    var dpiField = (!isNew && !admin)
+      ? gbField({ name: 'dpiVista', label: 'DPI', value: m.dpiMasked, attrs: 'disabled', hint: 'Solo un administrador puede ver o cambiar el DPI.' })
+      : gbField({ name: 'dpi', label: 'DPI', value: m.dpi, attrs: 'inputmode="numeric" maxlength="13" autocomplete="off"', hint: '13 dígitos, sin guiones.' });
+
+    var body = '<div class="cp-gb-form">' +
+      gbField({ name: 'nombres', label: 'Nombres', value: m.nombres }) +
+      gbField({ name: 'apellidos', label: 'Apellidos', value: m.apellidos }) +
+      dpiField +
+      gbField({ name: 'fechaNacimiento', label: 'Fecha de nacimiento', type: 'date', value: m.fechaNacimiento }) +
+      gbField({ name: 'telefono', label: 'Teléfono', type: 'tel', value: m.telefono, attrs: 'inputmode="numeric" maxlength="8" autocomplete="off"', hint: '8 dígitos. Se usa para WhatsApp.' }) +
+      gbField({ name: 'correo', label: 'Correo (opcional)', type: 'email', value: m.correo, hint: 'Si lo tiene, también recibe los mensajes por correo.' }) +
+      gbField({ name: 'genero', label: 'Género', type: 'select', value: m.genero, options: [['', 'Selecciona…'], ['Masculino', 'Masculino'], ['Femenino', 'Femenino']] }) +
+      gbField({ name: 'mensualidad', label: 'Mensualidad (Q)', type: 'number', value: m.mensualidad, attrs: 'list="gb-fees" min="1" step="1" inputmode="numeric"' }) +
+      gbField({ name: 'diaPago', label: 'Día de pago del mes', type: 'number', value: m.diaPago, attrs: 'min="1" max="31" step="1" inputmode="numeric"', hint: 'Cada mes vence este día.' }) +
+      (isNew ? '' : gbField({ name: 'estado', label: 'Estado', type: 'select', value: m.estado, options: [['Activo', 'Activo'], ['Inactivo', 'Inactivo'], ['Suspendido', 'Suspendido']] })) +
+      gbField({ name: 'notas', label: 'Notas (opcional)', type: 'textarea', value: m.notas, wide: true, rows: 2 }) +
+    '</div>';
+
+    gbModal({
+      title: isNew ? 'Nuevo miembro' : 'Editar datos', body: body,
+      foot: [
+        { label: 'Cancelar', onClick: function (h) { h.close(); } },
+        { label: isNew ? 'Registrar miembro' : 'Guardar cambios', kind: 'primary', onClick: function (h) {
+          var data = gbFormData(h.body);
+          delete data.dpiVista;
+          if (!isNew) data.memberId = member.memberId;
+          h.busy(true);
+          gbCall('members.save', [data], function (r) {
+            h.busy(false);
+            if (!r.ok) { gbSetErrors(h.body, r.errors); cpToast(r.message || 'Revisa los campos marcados.', 'warn'); return; }
+            h.close();
+            cpToast(r.created ? 'Miembro registrado.' : 'Cambios guardados.', 'ok');
+            if (GBM.loaded) gbMembersSearch();
+            if (r.created) gbOpenMember(r.member.memberId); else if (GBM.open) gbReloadFicha();
+          }, { fail: function (msg) { h.busy(false); cpToast(msg, 'error'); } });
+        } }
+      ]
+    });
+  }
+
+  function gbDeleteMember(m) {
+    gbConfirm('Vas a eliminar a ' + m.nombre + '. Si solo dejó de venir, es mejor marcarlo como inactivo para conservar su historial.',
+      { title: 'Eliminar miembro', danger: true, okLabel: 'Eliminar' }, function () {
+      gbCall('members.delete', [m.memberId, false], function (r) {
+        if (r.needsCascade) {
+          var c = r.counts;
+          gbConfirm('Tiene historial: ' + c.pagos + ' pagos, ' + c.medidas + ' medidas, ' + c.evaluaciones + ' evaluaciones, ' + c.asistencia +
+            ' asistencias y ' + c.mensajes + ' mensajes. ¿Borrar al miembro Y todo su historial? No se puede deshacer.',
+            { title: 'Borrar también el historial', danger: true, okLabel: 'Borrar todo' }, function () {
+            gbCall('members.delete', [m.memberId, true], function () { gbAfterDelete(); }, { busy: true });
+          });
+          return;
+        }
+        gbAfterDelete();
+      }, { busy: true });
+    });
+  }
+
+  function gbAfterDelete() {
+    cpToast('Miembro eliminado.', 'ok');
+    if (GBM.open) GBM.open.modal.close();
+    gbMembersSearch();
+  }
+
+  // ---------- Formulario: pago ----------
+
+  function gbPaymentForm(m) {
+    var fees = GB.fees.slice();
+    if (m.mensualidad && fees.indexOf(m.mensualidad) === -1) fees.unshift(m.mensualidad);
+    var options = fees.map(function (f) { return [String(f), gbMoney(f)]; }).concat([['otro', 'Otro monto…']]);
+    var body = '<div class="cp-gb-form">' +
+      gbField({ name: 'fecha', label: 'Fecha del pago', type: 'date', value: gbToday() }) +
+      gbField({ name: 'montoSel', label: 'Monto', type: 'select', value: String(m.mensualidad || fees[0]), options: options }) +
+      '<div class="cp-gb-field is-wide" data-field="monto" id="gb-pay-other" hidden><label for="gbf-monto">Monto (Q)</label>' +
+        '<input id="gbf-monto" name="monto" type="number" min="1" step="0.01" inputmode="decimal"><span class="cp-gb-err" data-err="monto"></span></div>' +
+      gbField({ name: 'nota', label: 'Nota (opcional)', value: '', wide: true, placeholder: 'Por ejemplo: pagó en efectivo' }) +
+    '</div><p class="cp-hint" style="margin-top:12px">Al guardar se prepara la boleta para enviarla por WhatsApp.</p>';
+
+    var modal = gbModal({
+      title: 'Registrar pago · ' + m.nombre, body: body, size: 'sm',
+      foot: [
+        { label: 'Cancelar', onClick: function (h) { h.close(); } },
+        { label: 'Registrar pago', kind: 'primary', onClick: function (h) { gbSubmitPayment(h, m, false); } }
+      ]
+    });
+    var sel = modal.body.querySelector('[name="montoSel"]');
+    sel.addEventListener('change', function () {
+      document.getElementById('gb-pay-other').hidden = sel.value !== 'otro';
+    });
+  }
+
+  function gbSubmitPayment(h, m, force) {
+    var data = gbFormData(h.body);
+    var amount = data.montoSel === 'otro' ? data.monto : data.montoSel;
+    h.busy(true);
+    gbCall('payments.register', [{ memberId: m.memberId, fecha: data.fecha, monto: amount, nota: data.nota, force: !!force }], function (r) {
+      h.busy(false);
+      if (r.duplicate) {
+        gbConfirm(r.message + ' ¿Registrar otro igual?', { title: 'Pago repetido', okLabel: 'Registrar otro' }, function () { gbSubmitPayment(h, m, true); });
+        return;
+      }
+      if (!r.ok) { gbSetErrors(h.body, r.errors || {}); cpToast(r.message || 'No se pudo registrar el pago.', 'warn'); return; }
+      h.close();
+      gbAfterChange();
+      var info = '<div class="cp-gb-note is-ok" style="background:#E8F5EE;border-color:#BFE0CE;color:var(--cp-ok)">Pago de ' + gbMoney(r.payment.monto) + ' registrado. ' +
+        'Próximo pago: <b>' + gbDate(r.pago.nextDue) + '</b>.' + (r.reactivated ? ' El miembro volvió a estar activo.' : '') + '</div>';
+      gbShowQueued(r.mensaje, 'Pago registrado', info);
+    }, { fail: function (msg) { h.busy(false); cpToast(msg, 'error'); } });
+  }
+
+  // ---------- Formulario: medidas ----------
+
+  var GB_MEASURES = [
+    ['cuello', 'Cuello (cm)'], ['pecho', 'Pecho (cm)'], ['brazoDer', 'Brazo derecho (cm)'], ['brazoIzq', 'Brazo izquierdo (cm)'],
+    ['cintura', 'Cintura (cm)'], ['cadera', 'Cadera (cm)'], ['piernaDer', 'Pierna derecha (cm)'], ['piernaIzq', 'Pierna izquierda (cm)'],
+    ['pesoLb', 'Peso (libras)']
+  ];
+
+  function gbMeasureForm(m) {
+    gbCall('measurements.prefill', [m.memberId], function (r) {
+      var last = r.ultima || {};
+      var body = '<div class="cp-gb-form">' +
+        gbField({ name: 'fecha', label: 'Fecha', type: 'date', value: gbToday(), wide: true }) +
+        GB_MEASURES.map(function (f) {
+          return gbField({ name: f[0], label: f[1], value: last[f[0]] === undefined ? '' : last[f[0]], attrs: 'inputmode="decimal" autocomplete="off"' });
+        }).join('') + '</div>' +
+        '<p class="cp-hint" style="margin-top:12px">' + (r.ultima ? 'Se precargaron las medidas del ' + gbDate(last.fecha) + ' para que solo cambies lo que varió.' : 'Primer registro de medidas de este miembro.') + '</p>';
+
+      gbModal({
+        title: 'Registrar medidas · ' + m.nombre, body: body,
+        foot: [
+          { label: 'Cancelar', onClick: function (h) { h.close(); } },
+          { label: 'Guardar medidas', kind: 'primary', onClick: function (h) {
+            var data = gbFormData(h.body); data.memberId = m.memberId;
+            h.busy(true);
+            gbCall('measurements.register', [data], function (res) {
+              h.busy(false);
+              if (!res.ok) { gbSetErrors(h.body, res.errors || {}); cpToast(res.message || 'Revisa los campos marcados.', 'warn'); return; }
+              h.close(); gbAfterChange();
+              gbConfirm('Medidas registradas. ¿Preparar el reporte para enviárselo por WhatsApp?', { title: 'Medidas guardadas', okLabel: 'Preparar reporte' }, function () {
+                gbQueueMessage({ type: 'medidas', memberId: m.memberId, measurementId: res.medida.medidaId, force: true }, 'Reporte de medidas');
+              });
+            }, { fail: function (msg) { h.busy(false); cpToast(msg, 'error'); } });
+          } }
+        ]
+      });
+    }, { busy: true });
+  }
+
+  // ---------- Formulario: evaluación ----------
+
+  function gbEvalForm(m) {
+    gbLoadCatalog(function (catalog) {
+      var body = '<div class="cp-gb-form" style="margin-bottom:6px">' + gbField({ name: 'fecha', label: 'Fecha', type: 'date', value: gbToday(), wide: true }) + '</div>' +
+        [0, 1, 2, 3].map(function (level) {
+          return '<div class="cp-gb-level"><h4>Nivel ' + level + '</h4><div class="cp-gb-form">' +
+            catalog.filter(function (c) { return c.nivel === level; }).map(function (c) {
+              return gbField({ name: c.codigo, label: c.nombre, attrs: 'inputmode="numeric" placeholder="meta ' + c.meta + ' ' + c.unidad + '" autocomplete="off"' });
+            }).join('') + '</div></div>';
+        }).join('') + '<p class="cp-hint" style="margin-top:12px">Llena solo los ejercicios que hizo. Resultado en repeticiones o segundos, según la meta indicada.</p>';
+
+      gbModal({
+        title: 'Evaluación física · ' + m.nombre, size: 'lg', body: body,
+        foot: [
+          { label: 'Cancelar', onClick: function (h) { h.close(); } },
+          { label: 'Guardar evaluación', kind: 'primary', onClick: function (h) {
+            var data = gbFormData(h.body);
+            var values = {}, fecha = data.fecha;
+            Object.keys(data).forEach(function (k) { if (k !== 'fecha') values[k] = data[k]; });
+            h.busy(true);
+            gbCall('evaluations.register', [{ memberId: m.memberId, fecha: fecha, valores: values }], function (res) {
+              h.busy(false);
+              if (!res.ok) { gbSetErrors(h.body, res.errors || {}); cpToast(res.message || 'Revisa los campos marcados.', 'warn'); return; }
+              h.close(); gbAfterChange();
+              var p = res.evaluacion.puntajes;
+              var summary = [0, 1, 2, 3].filter(function (l) { return p['n' + l] !== ''; }).map(function (l) { return 'Nivel ' + l + ': ' + Math.round(p['n' + l] * 100) + ' %'; }).join(' · ');
+              gbConfirm('Evaluación guardada. ' + summary + '. ¿Preparar el reporte para enviarlo por WhatsApp?', { title: 'Evaluación guardada', okLabel: 'Preparar reporte' }, function () {
+                gbQueueMessage({ type: 'evaluacion', memberId: m.memberId, evalId: res.evaluacion.evalId, force: true }, 'Evaluación física');
+              });
+            }, { fail: function (msg) { h.busy(false); cpToast(msg, 'error'); } });
+          } }
+        ]
+      });
+    });
+  }
+</script>

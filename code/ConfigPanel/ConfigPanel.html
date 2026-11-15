@@ -61,6 +61,8 @@
     </div>
   </div>
 
+  <?!= include('ConfigPanel/Gestion/GestionCommon') ?>
+
   <div class="cp-app">
     <nav class="cp-rail" id="cp-rail" aria-label="Secciones del panel">
       <div class="cp-brand">
@@ -72,35 +74,57 @@
       </div>
 
       <div class="cp-nav" id="cp-nav">
-        <button type="button" class="cp-nav-item" data-tab="sitio">
+        <div class="cp-nav-label">Gimnasio</div>
+        <button type="button" class="cp-nav-item" data-tab="progreso">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          <span>Progreso</span><i class="cp-dot" aria-hidden="true"></i>
+        </button>
+        <button type="button" class="cp-nav-item" data-tab="miembros">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <span>Miembros</span><i class="cp-dot" aria-hidden="true"></i>
+        </button>
+        <button type="button" class="cp-nav-item" data-tab="asistencia">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+          <span>Asistencia</span><i class="cp-dot" aria-hidden="true"></i>
+        </button>
+        <button type="button" class="cp-nav-item" data-tab="mensajes">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          <span>Mensajes</span><i class="cp-dot" aria-hidden="true"></i>
+        </button>
+        <button type="button" class="cp-nav-item" data-tab="ajustes" data-role="admin">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/></svg>
+          <span>Ajustes</span><i class="cp-dot" aria-hidden="true"></i>
+        </button>
+        <div class="cp-nav-label" data-role="admin">Sitio web</div>
+        <button type="button" class="cp-nav-item" data-tab="sitio" data-role="admin">
           <svg viewBox="0 0 24 24" aria-hidden="true"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
           <span>Sitio</span><i class="cp-dot" aria-hidden="true"></i>
         </button>
-        <button type="button" class="cp-nav-item" data-tab="imagenes">
+        <button type="button" class="cp-nav-item" data-tab="imagenes" data-role="admin">
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
           <span>Imágenes</span><i class="cp-dot" aria-hidden="true"></i>
         </button>
-        <button type="button" class="cp-nav-item" data-tab="carrusel">
+        <button type="button" class="cp-nav-item" data-tab="carrusel" data-role="admin">
           <svg viewBox="0 0 24 24" aria-hidden="true"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
           <span>Carrusel</span><i class="cp-dot" aria-hidden="true"></i>
         </button>
-        <button type="button" class="cp-nav-item" data-tab="caracteristicas">
+        <button type="button" class="cp-nav-item" data-tab="caracteristicas" data-role="admin">
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
           <span>Características</span><i class="cp-dot" aria-hidden="true"></i>
         </button>
-        <button type="button" class="cp-nav-item" data-tab="programas">
+        <button type="button" class="cp-nav-item" data-tab="programas" data-role="admin">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4v16M18 4v16M3 9h6M15 9h6M3 15h6M15 15h6"/></svg>
           <span>Programas</span><i class="cp-dot" aria-hidden="true"></i>
         </button>
-        <button type="button" class="cp-nav-item" data-tab="horario">
+        <button type="button" class="cp-nav-item" data-tab="horario" data-role="admin">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>
           <span>Horario</span><i class="cp-dot" aria-hidden="true"></i>
         </button>
-        <button type="button" class="cp-nav-item" data-tab="redes">
+        <button type="button" class="cp-nav-item" data-tab="redes" data-role="admin">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/><line x1="15.4" y1="6.5" x2="8.6" y2="10.5"/></svg>
           <span>Redes</span><i class="cp-dot" aria-hidden="true"></i>
         </button>
-        <button type="button" class="cp-nav-item" data-tab="sistema">
+        <button type="button" class="cp-nav-item" data-tab="sistema" data-role="admin">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
           <span>Sistema</span><i class="cp-dot" aria-hidden="true"></i>
         </button>
@@ -141,6 +165,21 @@
       <div class="cp-progress" id="cp-progress" aria-hidden="true"></div>
 
       <div class="cp-body" id="cp-body">
+        <section class="cp-pane" id="pane-progreso">
+          <?!= include('ConfigPanel/TabProgreso/TabProgreso') ?>
+        </section>
+        <section class="cp-pane" id="pane-miembros">
+          <?!= include('ConfigPanel/TabMiembros/TabMiembros') ?>
+        </section>
+        <section class="cp-pane" id="pane-asistencia">
+          <?!= include('ConfigPanel/TabAsistencia/TabAsistencia') ?>
+        </section>
+        <section class="cp-pane" id="pane-mensajes">
+          <?!= include('ConfigPanel/TabMensajes/TabMensajes') ?>
+        </section>
+        <section class="cp-pane" id="pane-ajustes">
+          <?!= include('ConfigPanel/TabAjustes/TabAjustes') ?>
+        </section>
         <section class="cp-pane" id="pane-sitio" aria-labelledby="cp-title">
           <?!= include('ConfigPanel/TabSitio/TabSitio') ?>
         </section>
@@ -180,7 +219,7 @@
     // ===  Estado compartido del panel  ==========================
     // ============================================================
 
-    var CP_START_TAB = <?!= JSON.stringify(activeTab || 'sitio') ?>;
+    var CP_START_TAB = <?!= JSON.stringify(activeTab || 'progreso') ?>;
     var CP_WEB_URL = <?!= JSON.stringify(webAppUrl || '') ?>;
     var CP_IS_WEB_APP = <?!= JSON.stringify(typeof isWebApp !== 'undefined' && isWebApp === true) ?>;
     var CP_AUTH_CALLBACK_URL = <?!= JSON.stringify(typeof authCallbackUrl !== 'undefined' ? authCallbackUrl : '') ?>;
@@ -189,6 +228,7 @@
     var CP = {
       data: null,
       tab: CP_START_TAB,
+      role: '',
       dirty: {},
       model: {
         site: [],
@@ -203,45 +243,78 @@
     };
 
     var CP_TABS = {
+      progreso: {
+        title: 'Progreso',
+        subtitle: 'A quién atender hoy, cuánta gente viene y cómo está la cartera de miembros.',
+        save: '', onShow: 'gbShowProgress'
+      },
+      miembros: {
+        title: 'Miembros',
+        subtitle: 'Busca a un miembro para registrar pagos, medidas y evaluaciones, o enviarle mensajes.',
+        save: '', onShow: 'gbShowMembers'
+      },
+      asistencia: {
+        title: 'Asistencia',
+        subtitle: 'Quién vino hoy. También puedes registrar una asistencia a mano.',
+        save: '', onShow: 'gbShowAttendance'
+      },
+      mensajes: {
+        title: 'Mensajes',
+        subtitle: 'Boletas, reportes y recordatorios listos para enviar. WhatsApp se envía con un toque.',
+        save: '', onShow: 'gbShowMessages'
+      },
+      ajustes: {
+        title: 'Ajustes',
+        subtitle: 'Automatización, tablets de asistencia, plantillas de mensajes y configuración.',
+        save: '', onShow: 'gbShowSettings', role: 'admin'
+      },
       sitio: {
         title: 'Sitio',
         subtitle: 'Nombre, contacto, redes y colores del sitio.',
-        save: 'cpSaveSiteTab'
+        save: 'cpSaveSiteTab',
+        role: 'admin'
       },
       imagenes: {
         title: 'Imágenes',
         subtitle: 'Las fotos que usa el sitio. Súbelas a Drive o elige las que ya existen.',
-        save: 'cpSaveImagesTab'
+        save: 'cpSaveImagesTab',
+        role: 'admin'
       },
       carrusel: {
         title: 'Carrusel',
         subtitle: 'Las diapositivas grandes de la portada.',
-        save: 'cpSaveCarouselTab'
+        save: 'cpSaveCarouselTab',
+        role: 'admin'
       },
       caracteristicas: {
         title: 'Características',
         subtitle: 'Los tres bloques que explican qué ofrece el gimnasio.',
-        save: 'cpSaveFeaturesTab'
+        save: 'cpSaveFeaturesTab',
+        role: 'admin'
       },
       programas: {
         title: 'Programas',
         subtitle: 'Rutinas, instrucciones y ejercicios de cada nivel.',
-        save: 'cpSaveProgramsTab'
+        save: 'cpSaveProgramsTab',
+        role: 'admin'
       },
       horario: {
         title: 'Horario',
         subtitle: 'Días, turnos y colores. Un día sin turnos se muestra como «Cerrado».',
-        save: 'cpSaveScheduleTab'
+        save: 'cpSaveScheduleTab',
+        role: 'admin'
       },
       redes: {
         title: 'Redes',
         subtitle: 'Los enlaces e iconos del pie de página y la tarjeta de contacto.',
-        save: 'cpSaveSocialTab'
+        save: 'cpSaveSocialTab',
+        role: 'admin'
       },
       sistema: {
         title: 'Sistema',
         subtitle: 'Comprobaciones, respaldos y actividad reciente.',
-        save: ''
+        save: '',
+        role: 'admin'
       }
     };
 
@@ -263,11 +336,8 @@
 
       cpBindGlobalEvents();
 
-      if (CP_IS_WEB_APP) {
-        cpInitWebAuth();
-      } else {
-        cpLoadData();
-      }
+      // Siempre se verifica el acceso en el servidor (y se obtiene el rol), también dentro de la hoja.
+      cpInitWebAuth();
     }
 
     function cpGetToken() {
@@ -291,7 +361,7 @@
       google.script.run
         .withSuccessHandler(function (res) {
           if (res && res.authorized) {
-            cpOnAccessGranted(res.email);
+            cpOnAccessGranted(res.email, res.role);
           } else if (res && res.unauthorized) {
             cpShowGateUnauthorized(res.email, res.error);
           } else {
@@ -305,7 +375,8 @@
         .cpVerifyAdminAccess(token);
     }
 
-    function cpOnAccessGranted(email) {
+    function cpOnAccessGranted(email, role) {
+      CP.role = role || 'Admin';
       var gate = document.getElementById('cp-auth-gate');
       if (gate) gate.style.display = 'none';
 
@@ -318,7 +389,22 @@
       if (railAccount) railAccount.hidden = false;
       if (emailMobile && email) emailMobile.textContent = email;
 
-      cpLoadData();
+      cpApplyRole();
+      var start = CP_START_TAB;
+      if (!CP_TABS[start] || (CP_TABS[start].role === 'admin' && CP.role !== 'Admin')) start = 'progreso';
+      CP_START_TAB = start;
+
+      // Los datos del sitio web solo los lee (y los necesita) un Admin.
+      if (CP.role === 'Admin') cpLoadData();
+      else cpSwitchTab(start, true);
+    }
+
+    /** Oculta lo que el rol no puede usar (el servidor lo vuelve a verificar en cada llamada). */
+    function cpApplyRole() {
+      var isAdmin = CP.role === 'Admin';
+      Array.prototype.forEach.call(document.querySelectorAll('[data-role="admin"]'), function (el) {
+        el.hidden = !isAdmin;
+      });
     }
 
     function cpShowGateView(viewName) {
@@ -413,7 +499,7 @@
               google.script.run
                 .withSuccessHandler(function (authRes) {
                   if (authRes && authRes.authorized) {
-                    cpOnAccessGranted(authRes.email);
+                    cpOnAccessGranted(authRes.email, authRes.role);
                   } else if (authRes && authRes.unauthorized) {
                     cpShowGateUnauthorized(authRes.email, authRes.error);
                   } else {
@@ -461,9 +547,22 @@
         })
         .withFailureHandler(function (err) {
           cpBusy(false);
+          if (cpHandleAuthError(err && err.message)) return;
           cpFatal(err);
         })
-        .cpGetData();
+        .gbApi(cpGetToken(), 'cpGetData', []);
+    }
+
+    /**
+     * Si el servidor rechazó la sesión (mensaje "AUTH: …") cierra la sesión local
+     * y vuelve a pedir el inicio de sesión. Devuelve true si lo manejó.
+     */
+    function cpHandleAuthError(message) {
+      if (String(message || '').indexOf('AUTH:') === -1) return false;
+      cpRemoveToken();
+      try { cpToast('Tu sesión terminó o no tienes permiso. Inicia sesión de nuevo.', 'error', true); } catch (_) {}
+      window.setTimeout(function () { window.location.reload(); }, 1500);
+      return true;
     }
 
     function cpFatal(err) {
@@ -589,6 +688,7 @@
      */
     function cpSwitchTab(tab, force) {
       if (!CP_TABS[tab]) return;
+      if (CP_TABS[tab].role === 'admin' && CP.role !== 'Admin') return;
       if (!force && tab !== CP.tab && CP.dirty[CP.tab]) {
         var current = CP_TABS[CP.tab].title;
         if (!window.confirm('Tienes cambios sin guardar en «' + current + '». ¿Salir de todos modos?')) {
@@ -617,6 +717,9 @@
 
       document.getElementById('cp-body').scrollTop = 0;
       cpRefreshDirtyUi();
+
+      // Las pestañas de gestión cargan sus datos al abrirse (no todo de golpe).
+      if (config.onShow && typeof window[config.onShow] === 'function') window[config.onShow]();
     }
 
     /** Abre o cierra el menú desplegable (móvil). */
@@ -701,9 +804,12 @@
         .withFailureHandler(function (err) {
           if (showBusy) cpBusy(false);
           var message = err && err.message ? err.message : 'No se pudo completar la acción.';
+          if (cpHandleAuthError(message)) return;
           if (handlers.fail) handlers.fail(message);
           else cpToast(message, 'error');
-        })[fn].apply(null, args || []);
+        })
+        // Única puerta al servidor: valida sesión y rol en cada llamada (Api.gs).
+        .gbApi(cpGetToken(), fn, args || []);
     }
 
     /**
@@ -1035,9 +1141,11 @@
           google.script.run
             .withSuccessHandler(resolve)
             .withFailureHandler(function (err) {
+              if (cpHandleAuthError(err && err.message)) return;
               reject(new Error(err && err.message ? err.message : 'No se pudo subir la imagen.'));
             })
-            .cpUploadImage(payload.dataUrl, payload.name, payload.mime, subPath || '', !!registerRef);
+            .gbApi(cpGetToken(), 'cpUploadImage',
+              [payload.dataUrl, payload.name, payload.mime, subPath || '', !!registerRef]);
         });
       });
     }

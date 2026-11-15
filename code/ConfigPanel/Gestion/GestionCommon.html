@@ -1,0 +1,330 @@
+<script>
+  // ============================================================
+  // ===  Gestión del gimnasio: utilidades compartidas  =========
+  // ============================================================
+  // Usadas por las pestañas Progreso, Miembros, Asistencia, Mensajes y Ajustes.
+  // Todo lo que llega del servidor pasa por gbApi (cpRun): el servidor valida
+  // sesión y rol en cada llamada; ocultar botones aquí es solo comodidad.
+
+  var GB = {
+    fees: [150, 140, 135, 130, 100],   // mensualidades habituales (el Excel las tenía en una lista)
+    catalog: null,                     // catálogo de la evaluación física (se carga una vez)
+    modals: []
+  };
+
+  function gbIsAdmin() { return CP.role === 'Admin'; }
+
+  /** Llama a una acción del servidor. ok(resultado) se ejecuta si todo sale bien. */
+  function gbCall(action, args, ok, opts) {
+    opts = opts || {};
+    cpRun(action, args || [], {
+      busy: opts.busy === undefined ? false : opts.busy,
+      ok: ok,
+      fail: opts.fail || function (message) { cpToast(message, 'error'); }
+    });
+  }
+
+  function gbDebounce(fn, wait) {
+    var timer = null;
+    return function () {
+      var args = arguments, self = this;
+      clearTimeout(timer);
+      timer = setTimeout(function () { fn.apply(self, args); }, wait);
+    };
+  }
+
+  // ---------- Formato ----------
+
+  function gbMoney(value) {
+    var n = Number(value) || 0;
+    return 'Q' + (Math.round(n) === n ? String(n) : n.toFixed(2));
+  }
+
+  /** 2026-11-14 → 14/11/2026 */
+  function gbDate(iso) {
+    var m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return m ? m[3] + '/' + m[2] + '/' + m[1] : '';
+  }
+
+  /** Hoy en formato yyyy-mm-dd (hora local del navegador). */
+  function gbToday() {
+    var d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+
+  function gbPlural(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
+
+  function gbPagoChip(pago) {
+    if (!pago) return '';
+    var kind = { al_dia: 'is-ok', por_vencer: 'is-warn', gracia: 'is-warn', vencido: 'is-bad', sin_pagos: 'is-bad' }[pago.code] || '';
+    return '<span class="cp-gb-chip ' + kind + '">' + cpEsc(pago.label) + '</span>';
+  }
+
+  function gbEstadoChip(estado) {
+    var kind = { Activo: 'is-ok', Inactivo: '', Suspendido: 'is-warn' }[estado] || '';
+    return '<span class="cp-gb-chip ' + kind + '">' + cpEsc(estado) + '</span>';
+  }
+
+  /** Texto corto del vencimiento: "vence 05/12/2026", "venció hace 4 días". */
+  function gbVenceTexto(pago) {
+    if (!pago || !pago.nextDue) return '';
+    if (pago.daysOverdue > 0) return 'venció ' + gbDate(pago.nextDue) + ' (hace ' + gbPlural(pago.daysOverdue, 'día', 'días') + ')';
+    return 'vence ' + gbDate(pago.nextDue);
+  }
+
+  /** Línea simple de evolución (SVG). */
+  function gbSpark(values) {
+    var pts = (values || []).filter(function (v) { return v !== '' && v != null && !isNaN(Number(v)); }).map(Number);
+    if (pts.length < 2) return '';
+    var w = 200, h = 48, pad = 4;
+    var min = Math.min.apply(null, pts), max = Math.max.apply(null, pts), span = max - min || 1;
+    var coords = pts.map(function (v, i) {
+      return [pad + (i / (pts.length - 1)) * (w - pad * 2), h - pad - ((v - min) / span) * (h - pad * 2)];
+    });
+    var last = coords[coords.length - 1];
+    return '<svg class="cp-gb-spark" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none" aria-hidden="true">' +
+      '<polyline fill="none" stroke="#0E0E53" stroke-width="2" points="' +
+      coords.map(function (c) { return c[0].toFixed(1) + ',' + c[1].toFixed(1); }).join(' ') + '"/>' +
+      '<circle cx="' + last[0].toFixed(1) + '" cy="' + last[1].toFixed(1) + '" r="3.5" fill="#0E0E53"/></svg>';
+  }
+
+  // ---------- Ventanas ----------
+
+  /**
+   * Abre una ventana. opts: { title, body (HTML), size: 'sm'|'lg', foot: [{label, kind, onClick, id}],
+   * onMount(handle), onClose() }. Devuelve { el, body, close() }.
+   */
+  function gbModal(opts) {
+    var overlay = document.createElement('div');
+    overlay.className = 'cp-gb-modal';
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    overlay.style.zIndex = String(1100 + GB.modals.length * 10);
+
+    var foot = (opts.foot || []).map(function (b, i) {
+      return '<button type="button" class="cp-btn ' + (b.kind === 'primary' ? 'cp-btn--primary' : b.kind === 'danger' ? 'cp-btn--danger' : b.kind === 'wa' ? 'cp-gb-btn-wa' : '') +
+        '" data-foot="' + i + '">' + cpEsc(b.label) + '</button>';
+    }).join('');
+
+    overlay.innerHTML =
+      '<div class="cp-gb-modal-card ' + (opts.size ? 'is-' + opts.size : '') + '">' +
+        '<div class="cp-gb-modal-head"><h2>' + cpEsc(opts.title || '') + '</h2>' +
+          '<button type="button" class="cp-icon-btn" data-close aria-label="Cerrar">&#10005;</button></div>' +
+        '<div class="cp-gb-modal-body">' + (opts.body || '') + '</div>' +
+        (foot ? '<div class="cp-gb-modal-foot">' + foot + '</div>' : '') +
+      '</div>';
+
+    var handle = {
+      el: overlay,
+      body: overlay.querySelector('.cp-gb-modal-body'),
+      close: function () {
+        var i = GB.modals.indexOf(handle);
+        if (i === -1) return;
+        GB.modals.splice(i, 1);
+        overlay.remove();
+        if (opts.onClose) opts.onClose();
+      },
+      setTitle: function (text) { overlay.querySelector('.cp-gb-modal-head h2').textContent = text; },
+      button: function (index) { return overlay.querySelector('[data-foot="' + index + '"]'); },
+      busy: function (on) {
+        Array.prototype.forEach.call(overlay.querySelectorAll('.cp-gb-modal-foot button'), function (b) { b.disabled = !!on; });
+      }
+    };
+
+    overlay.addEventListener('mousedown', function (e) { if (e.target === overlay && opts.dismissable !== false) handle.close(); });
+    overlay.addEventListener('click', function (e) {
+      if (e.target.closest('[data-close]')) { handle.close(); return; }
+      var btn = e.target.closest('[data-foot]');
+      if (btn) {
+        var def = opts.foot[Number(btn.getAttribute('data-foot'))];
+        if (def && def.onClick) def.onClick(handle);
+      }
+    });
+
+    GB.modals.push(handle);
+    document.body.appendChild(overlay);
+    var first = overlay.querySelector('input:not([type=hidden]), select, textarea');
+    if (first && opts.autofocus !== false) setTimeout(function () { try { first.focus(); } catch (_) {} }, 30);
+    if (opts.onMount) opts.onMount(handle);
+    return handle;
+  }
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape' || !GB.modals.length) return;
+    GB.modals[GB.modals.length - 1].close();
+  });
+
+  /** Pregunta Sí/No. cb(true) solo si confirma. */
+  function gbConfirm(message, opts, cb) {
+    opts = opts || {};
+    gbModal({
+      title: opts.title || 'Confirmar', size: 'sm', autofocus: false,
+      body: '<p style="font-size:13.5px;line-height:1.5">' + cpEsc(message) + '</p>' + (opts.html || ''),
+      foot: [
+        { label: 'Cancelar', onClick: function (m) { m.close(); } },
+        { label: opts.okLabel || 'Aceptar', kind: opts.danger ? 'danger' : 'primary', onClick: function (m) { m.close(); cb(true); } }
+      ]
+    });
+  }
+
+  // ---------- Formularios ----------
+
+  /**
+   * Campo de formulario. f: { name, label, type, value, placeholder, wide, options:[[valor,texto]],
+   * attrs, hint }.
+   */
+  function gbField(f) {
+    var id = 'gbf-' + f.name;
+    var value = f.value == null ? '' : f.value;
+    var control;
+    if (f.type === 'select') {
+      control = '<select id="' + id + '" name="' + f.name + '">' + (f.options || []).map(function (o) {
+        return '<option value="' + cpEsc(o[0]) + '"' + (String(o[0]) === String(value) ? ' selected' : '') + '>' + cpEsc(o[1]) + '</option>';
+      }).join('') + '</select>';
+    } else if (f.type === 'textarea') {
+      control = '<textarea id="' + id + '" name="' + f.name + '" rows="' + (f.rows || 3) + '" placeholder="' + cpEsc(f.placeholder || '') + '">' + cpEsc(value) + '</textarea>';
+    } else {
+      control = '<input id="' + id + '" name="' + f.name + '" type="' + (f.type || 'text') + '" value="' + cpEsc(value) +
+        '" placeholder="' + cpEsc(f.placeholder || '') + '" ' + (f.attrs || '') + '>';
+    }
+    return '<div class="cp-gb-field' + (f.wide ? ' is-wide' : '') + '" data-field="' + f.name + '">' +
+      '<label for="' + id + '">' + cpEsc(f.label) + '</label>' + control +
+      (f.hint ? '<span class="cp-field-help">' + cpEsc(f.hint) + '</span>' : '') +
+      '<span class="cp-gb-err" data-err="' + f.name + '"></span></div>';
+  }
+
+  /** Lee todos los campos con atributo name dentro de `root`. */
+  function gbFormData(root) {
+    var out = {};
+    Array.prototype.forEach.call(root.querySelectorAll('[name]'), function (el) { out[el.name] = el.value; });
+    return out;
+  }
+
+  /** Marca los campos con error y muestra su mensaje (errors = { campo: texto }). */
+  function gbSetErrors(root, errors) {
+    Array.prototype.forEach.call(root.querySelectorAll('.cp-gb-field'), function (f) { f.classList.remove('has-error'); });
+    Array.prototype.forEach.call(root.querySelectorAll('[data-err]'), function (e) { e.textContent = ''; });
+    var first = null;
+    Object.keys(errors || {}).forEach(function (name) {
+      var field = root.querySelector('[data-field="' + name + '"]');
+      var msg = root.querySelector('[data-err="' + name + '"]');
+      if (field) { field.classList.add('has-error'); if (!first) first = field; }
+      if (msg) msg.textContent = errors[name];
+    });
+    if (first) {
+      var input = first.querySelector('input, select, textarea');
+      if (input) try { input.focus(); } catch (_) {}
+    }
+  }
+
+  // ---------- Mensajes (WhatsApp / correo) ----------
+
+  var GB_TIPOS = {
+    boleta: 'Boleta de pago', medidas: 'Reporte de medidas', evaluacion: 'Evaluación física', carnet: 'Carnet con QR',
+    recordatorio_pago: 'Recordatorio de pago', pago_vencido: 'Pago vencido', inactividad: 'Inactividad', progreso: 'Seguimiento'
+  };
+
+  /** HTML de una tarjeta de mensaje (la usan la bandeja y la ventana de resultado). */
+  function gbMessageCard(m, opts) {
+    opts = opts || {};
+    var done = m.estado !== 'Pendiente' && m.estado !== 'Error';
+    var chip = m.estado === 'Enviado' ? '<span class="cp-gb-chip is-ok">Enviado</span>'
+      : m.estado === 'Error' ? '<span class="cp-gb-chip is-bad">Error</span>'
+      : m.estado === 'Descartado' ? '<span class="cp-gb-chip">Descartado</span>'
+      : '<span class="cp-gb-chip is-warn">Pendiente</span>';
+    var actions = '';
+    if (m.canal === 'WhatsApp' && !done) {
+      actions = m.waUrl
+        ? '<button type="button" class="cp-btn cp-gb-btn-wa" data-msg-act="wa" data-id="' + cpEsc(m.mensajeId) + '" data-url="' + cpEsc(m.waUrl) + '">Abrir WhatsApp</button>' +
+          '<button type="button" class="cp-btn" data-msg-act="sent" data-id="' + cpEsc(m.mensajeId) + '">Marcar como enviado</button>'
+        : '<span class="cp-hint">El teléfono no es válido para WhatsApp.</span>';
+    } else if (m.canal === 'Email' && m.estado === 'Error') {
+      actions = '<button type="button" class="cp-btn" data-msg-act="retry" data-id="' + cpEsc(m.mensajeId) + '">Reintentar envío</button>';
+    }
+    if (!done && !opts.noDiscard) {
+      actions += '<button type="button" class="cp-btn cp-btn--ghost" data-msg-act="discard" data-id="' + cpEsc(m.mensajeId) + '">Descartar</button>';
+    }
+    return '<div class="cp-gb-msg' + (done ? ' is-done' : '') + '" data-msg="' + cpEsc(m.mensajeId) + '">' +
+      '<div class="cp-gb-msg-head"><div><span class="cp-gb-name">' + cpEsc(m.nombre || m.memberId) + '</span> ' +
+        '<span class="cp-gb-chip is-info">' + cpEsc(GB_TIPOS[m.tipo] || m.tipo) + '</span> ' +
+        '<span class="cp-gb-chip">' + (m.canal === 'WhatsApp' ? 'WhatsApp' : 'Correo') + '</span></div>' + chip + '</div>' +
+      '<div class="cp-gb-sub">' + (m.canal === 'WhatsApp' ? '+' + cpEsc(m.para) : cpEsc(m.para)) + (m.creadoEn ? ' · ' + cpEsc(gbDate(m.creadoEn.slice(0, 10))) : '') +
+        (m.enviadoPor ? ' · enviado por ' + cpEsc(m.enviadoPor) : '') + '</div>' +
+      (m.asunto ? '<div class="cp-gb-sub"><b>Asunto:</b> ' + cpEsc(m.asunto) + '</div>' : '') +
+      '<div class="cp-gb-msg-text">' + cpEsc(m.texto) + '</div>' +
+      (actions ? '<div class="cp-gb-msg-actions">' + actions + '</div>' : '') +
+    '</div>';
+  }
+
+  /**
+   * Conecta los botones de las tarjetas dentro de `root`.
+   * onChange(mensajeActualizado) se llama tras marcar/descartar/reintentar.
+   */
+  function gbBindMessageCards(root, onChange) {
+    root.addEventListener('click', function (e) {
+      var btn = e.target.closest('[data-msg-act]');
+      if (!btn) return;
+      var act = btn.getAttribute('data-msg-act');
+      var id = btn.getAttribute('data-id');
+
+      if (act === 'wa') {
+        window.open(btn.getAttribute('data-url'), '_blank', 'noopener');
+        // Tras abrir el chat, el botón principal pasa a "Ya lo envié".
+        var sentBtn = btn.parentNode.querySelector('[data-msg-act="sent"]');
+        if (sentBtn) { sentBtn.classList.add('cp-btn--primary'); sentBtn.textContent = 'Ya lo envié ✓'; }
+        return;
+      }
+      var action = { sent: 'messages.markSent', discard: 'messages.discard', retry: 'messages.retryEmail' }[act];
+      if (!action) return;
+      btn.disabled = true;
+      gbCall(action, [id], function (result) {
+        if (act === 'retry') cpToast(result.ok ? 'Correo enviado.' : 'No se pudo enviar el correo: ' + (result.error || ''), result.ok ? 'ok' : 'error');
+        if (onChange) onChange(result.mensaje || null, act);
+      }, { fail: function (msg) { btn.disabled = false; cpToast(msg, 'error'); } });
+    });
+  }
+
+  /**
+   * Muestra el resultado de crear un mensaje (messages.queue o payments.register):
+   * texto listo, botón de WhatsApp y avisos.
+   */
+  function gbShowQueued(result, title, extraHtml) {
+    var cards = '';
+    var notes = extraHtml || '';
+    if (result && result.mensaje && !result.whatsapp && !result.email) result = result.mensaje;
+    if (!result) return;
+    if (result.whatsapp) cards += gbMessageCard(result.whatsapp);
+    if (result.email) {
+      var em = result.email;
+      cards += '<div class="cp-gb-note">' + (em.estado === 'Enviado' ? 'Se envió también por correo a ' : 'Correo listo para ' ) + cpEsc(em.para) + '.</div>';
+    }
+    (result.warnings || []).forEach(function (w) { notes += '<div class="cp-gb-note is-warn">' + cpEsc(w) + '</div>'; });
+    if (!cards && !notes) { cpToast('No se pudo preparar el mensaje.', 'warn'); return; }
+    if (!cards && extraHtml) { notes += '<div class="cp-gb-note is-warn">No se pudo preparar el mensaje de WhatsApp. Revisa el teléfono del miembro.</div>'; }
+    var modal = gbModal({
+      title: title || 'Mensaje listo', autofocus: false,
+      body: notes + cards,
+      foot: [{ label: 'Cerrar', onClick: function (m) { m.close(); } }]
+    });
+    gbBindMessageCards(modal.el, function (updated) {
+      if (updated) {
+        var card = modal.el.querySelector('[data-msg="' + updated.mensajeId + '"]');
+        if (card) card.outerHTML = gbMessageCard(updated);
+        if (updated.estado === 'Enviado') cpToast('Marcado como enviado.', 'ok');
+        if (typeof gbRefreshMessageBadge === 'function') gbRefreshMessageBadge();
+      }
+    });
+  }
+
+  /** Crea un mensaje (carnet, reporte…) y muestra el resultado. */
+  function gbQueueMessage(req, title) {
+    gbCall('messages.queue', [req], function (result) { gbShowQueued(result, title); }, { busy: 'Preparando mensaje…' });
+  }
+
+  // ---------- Catálogo de evaluación ----------
+
+  function gbLoadCatalog(cb) {
+    if (GB.catalog) { cb(GB.catalog); return; }
+    gbCall('evaluations.catalog', [], function (result) { GB.catalog = result.ejercicios || []; cb(GB.catalog); });
+  }
+</script>
