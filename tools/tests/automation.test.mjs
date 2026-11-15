@@ -7,7 +7,7 @@ import crypto from 'node:crypto';
 import { loadGas, memSheet } from './gas-sandbox.mjs';
 
 const FILES = ['Auth.gs', 'Api.gs', 'Schema.gs', 'Repo.gs', 'Rules.gs', 'Members.gs', 'Payments.gs', 'Measurements.gs',
-  'Evaluations.gs', 'Messaging.gs', 'Attendance.gs', 'Triggers.gs', 'Wallet.gs', 'Pages.gs', 'Progress.gs', 'Modules.gs'];
+  'Evaluations.gs', 'Messaging.gs', 'Attendance.gs', 'Triggers.gs', 'Wallet.gs', 'Pages.gs', 'Progress.gs', 'DemoData.gs', 'Migration.gs', 'Modules.gs'];
 const ADMIN = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 const COACH = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
 const BASE = 'https://script.google.com/macros/s/TEST/exec';
@@ -728,4 +728,68 @@ test('mensaje manual de inactividad calcula los días desde la última visita', 
   const noVisits = h.addMember({ FechaRegistro: addDays(today(), -30) });
   const r2 = h.plain(h.admin('messages.queue', { type: 'inactividad', memberId: noVisits.MemberID }));
   assert.match(r2.whatsapp.texto, /Hace 30 días/);
+});
+
+
+// ============================================================ Datos de ejemplo y carga masiva
+
+test('datos de ejemplo: solo en staging y solo en una hoja vacía', () => {
+  const prod = env();                                                      // sin GB_ENV = producción
+  assert.throws(() => prod.ctx.gbSeedDemo_(), /solo se pueden cargar en el entorno de pruebas/);
+  assert.equal(prod.sheets['Miembros'].data.length, 1, 'no escribió nada');
+
+  const staging = env({ props: { GB_ENV: 'staging' } });
+  staging.ctx.gbSeedDemo_();
+  assert.throws(() => staging.ctx.gbSeedDemo_(), /ya tiene datos/);
+
+  const withData = env({ props: { GB_ENV: 'staging' } });
+  withData.addMember();
+  assert.throws(() => withData.ctx.gbSeedDemo_(), /ya tiene datos/, 'nunca se mezcla con datos existentes');
+});
+
+test('datos de ejemplo: generan un sistema completo y coherente, sin personas reales', () => {
+  const h = env({ props: { GB_ENV: 'staging' } });
+  const r = h.plain(h.ctx.gbSeedDemo_());
+  assert.equal(r.miembros, 24);
+  assert.ok(r.pagos > 40 && r.medidas === 96 && r.evaluaciones === 24 && r.asistencia > 100 && r.mensajes === 3, JSON.stringify(r));
+
+  h.sheets['EjerciciosEvaluacion'].data.push(...h.ctx.gbExerciseSeed_());
+  h.sheets['Plantillas'].data.push(...h.ctx.gbTemplateSeed_());
+  assert.deepEqual([...h.ctx.gbMigrationVerify_().issues], [], 'pasa la misma verificación de integridad que los datos reales');
+
+  const members = h.ctx.gbList_('members');
+  assert.ok(members.every(m => /^2000000\d{6}$/.test(m.DPI)), 'DPI inventados (prefijo reservado de ejemplo)');
+  assert.ok(members.every(m => !m.Correo || m.Correo.endsWith('@ejemplo.test')), 'correos de ejemplo');
+  assert.equal(new Set(members.map(m => m.TokenQR)).size, 24);
+
+  const o = h.plain(h.admin('progress.overview'));
+  const codes = new Set(o.atencion.flatMap(a => a.motivos.map(m => m.code)));
+  for (const needed of ['pago_vencido', 'sin_pagos', 'por_vencer']) assert.ok(codes.has(needed), 'el ejemplo cubre ' + needed);
+  assert.ok(o.hoy.visitas > 0);
+});
+
+test('datos de ejemplo: son deterministas (la misma hoja vacía produce los mismos datos)', () => {
+  const a = env({ props: { GB_ENV: 'staging' } }), b = env({ props: { GB_ENV: 'staging' } });
+  a.ctx.gbSeedDemo_(); b.ctx.gbSeedDemo_();
+  const names = h => h.ctx.gbList_('members').map(m => m.Nombres + m.Apellidos + m.Mensualidad).join('|');
+  assert.equal(names(a), names(b));
+});
+
+test('carga masiva: asigna IDs consecutivos a continuación de los existentes, con un solo bloqueo', () => {
+  const h = env();
+  h.ctx.gbAppend_('payments', { MemberID: 'GB-0001', Monto: 10 });          // PG-00001
+  const before = h.g.lock.lockCount;
+  const saved = h.plain(h.ctx.gbBulkAppend_('payments', [{ MemberID: 'GB-0001', Monto: 20 }, { MemberID: 'GB-0002', Monto: 30 }]));
+  assert.deepEqual(saved.map(r => r.PagoID), ['PG-00002', 'PG-00003']);
+  assert.equal(h.g.lock.lockCount - before, 1);
+  assert.equal(h.ctx.gbList_('payments').length, 3);
+  assert.deepEqual([...h.ctx.gbBulkAppend_('payments', [])], []);
+});
+
+test('carga masiva: una tabla grande crece más allá de las 1000 filas de una hoja nueva', () => {
+  const h = env();
+  const rows = Array.from({ length: 1500 }, (_, i) => ({ MemberID: 'GB-0001', Monto: i + 1 }));
+  h.ctx.gbBulkAppend_('payments', rows);
+  assert.equal(h.ctx.gbList_('payments').length, 1500);
+  assert.equal(h.sheets['Pagos'].data[1500][0], 'PG-01500');
 });

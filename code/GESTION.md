@@ -41,8 +41,8 @@ Las crea **Gymbars → Crear pestañas faltantes** (no borra nada). Definidas en
 
 ## Primer arranque (lista de pasos)
 
-1. **Subir y publicar** (`npx @google/clasp push`, nueva versión de la implementación). Los permisos
-   cambiaron (`script.send_mail`), así que hay que **volver a autorizar**.
+1. **Subir y publicar** con `npm run deploy:staging` / `npm run deploy:prod` (ver [`../DEPLOY.md`](../DEPLOY.md)). Los permisos
+   cambiaron (`script.send_mail`), así que hay que **volver a autorizar** una vez en el editor (función `onOpen`).
 2. En la hoja: **Gymbars → Crear pestañas faltantes**.
 3. **Usuarios**: escribir `Email | Rol | Activo` (`Admin` o `Coach`). El propietario de la hoja es
    siempre Admin. Mientras la pestaña esté vacía, los *editores* de la hoja entran como Admin;
@@ -143,7 +143,7 @@ Un pase firmado de Apple requiere el Apple Developer Program y no está incluido
 ## Desarrollo y pruebas
 
 ```bash
-node --test "tools/tests/*.test.mjs"      # 120+ pruebas: seguridad, reglas, mensajes, asistencia, escáner
+npm run verify                            # guardia + sintaxis + 150+ pruebas (seguridad, reglas, mensajes, asistencia, escáner, despliegue)
 node tools/preview-admin.mjs --demo        # panel completo con datos de ejemplo (http://localhost:3200)
 node tools/ui-check.mjs                    # recorre la interfaz en Chrome y guarda capturas
 node tools/preview.mjs                     # el sitio público con los datos reales (solo lectura)

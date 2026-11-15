@@ -263,6 +263,7 @@ function onOpen() {
     .addItem('Migración: simulacro (no escribe)', 'gbMigrationDryRunMenu_')
     .addItem('Migración: importar datos del Excel', 'gbMigrationImportMenu_')
     .addItem('Verificar datos migrados', 'gbMigrationVerifyMenu_')
+    .addItem('Cargar datos de ejemplo (solo pruebas)', 'gbSeedDemoMenu_')
     .addToUi();
 }
 

@@ -24,6 +24,17 @@ var GB_ROLES = { ADMIN: 'Admin', COACH: 'Coach' };
 /** Prefijo de las sesiones guardadas en Script Properties. */
 var GB_SESSION_PREFIX = 'CP_SESSION_';
 
+/**
+ * Entorno de este proyecto: 'staging' (pruebas) o 'produccion'.
+ * Se lee de la propiedad del script GB_ENV; sin ella es producción. Es una propiedad (no una
+ * celda de la hoja) para que una COPIA de la hoja no herede el entorno por error.
+ */
+function gbEnvironment_() {
+  var value = '';
+  try { value = String(PropertiesService.getScriptProperties().getProperty('GB_ENV') || '').trim().toLowerCase(); } catch (_) {}
+  return value === 'staging' ? 'staging' : 'produccion';
+}
+
 /** Contexto de la llamada en curso (lo fija gbApi). Solo lectura para handlers. */
 var GB_CTX_ = null;
 
@@ -225,7 +236,7 @@ function gbPurgeSessions_() {
 function cpVerifyAdminAccess(token) {
   var a = gbAuth_(token);
   if (a.ok) {
-    return { success: true, authorized: true, email: a.email, role: a.role, method: a.method };
+    return { success: true, authorized: true, email: a.email, role: a.role, method: a.method, entorno: gbEnvironment_() };
   }
   if (a.unauthorized) {
     return { success: true, authorized: false, unauthorized: true, email: a.email, error: a.error };

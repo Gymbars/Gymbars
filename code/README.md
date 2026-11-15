@@ -27,6 +27,7 @@ code/
 ├── Progress.gs                # Panorama: a quién atender, visitas por semana
 ├── Wallet.gs                  # Carnet y pase de Google Wallet
 ├── Migration.gs               # Importar los CSV generados desde el Excel
+├── DemoData.gs                # Datos inventados (solo entorno de pruebas)
 ├── Index.html                 # Shell: fuentes, tema, parciales
 ├── Styles.html                # Variables CSS y estilos base
 ├── Navbar/
@@ -59,7 +60,9 @@ code/
 │   ├── Gestion/               # Utilidades compartidas de las pestañas de gestión
 │   ├── TabProgreso/  TabMiembros/  TabAsistencia/  TabMensajes/  TabAjustes/
 ├── appsscript.json
-├── .clasp.json.example
+├── .clasp.staging.json        # Proyecto de pruebas (ver ../DEPLOY.md)
+├── .clasp.prod.json           # Proyecto de producción
+├── .claspignore               # Solo se suben .gs, .html y appsscript.json
 └── README.md
 ```
 
@@ -199,20 +202,16 @@ en lugar de una imagen rota.
 
 ## Despliegue
 
+Hay dos entornos (pruebas y producción), cada uno con su propia hoja y su propio proyecto de Apps Script.
+El proceso completo, la vuelta atrás y la lista de pruebas están en **[`../DEPLOY.md`](../DEPLOY.md)**.
+
 ```bash
-# 1. Crear el proyecto de Apps Script (script.google.com) y copiar su ID
-cp code/.clasp.json.example code/.clasp.json
-# editar "scriptId"
-
-# 2. Subir
-npx @google/clasp push
-
-# 3. Publicar: Implementar → Nueva implementación → Aplicación web
-#    Ejecutar como: Yo · Acceso: Cualquier persona
+npm run deploy:staging     # rama develop → hoja de pruebas
+npm run deploy:prod        # rama master  → hoja real (pide confirmar el respaldo; vuelve solo si falla)
 ```
 
-En el editor de Apps Script, ejecutar una vez `setupSheets()` para crear las
-pestañas faltantes (la hoja ya viene poblada) y luego implementar el Web App.
+No uses `clasp push` a secas: `code/.clasp.json` ya no existe a propósito (hay `.clasp.staging.json` y `.clasp.prod.json`),
+así que un `clasp push` sin indicar el entorno falla en vez de cambiar producción por accidente.
 
 > **Importante al actualizar:** `appsscript.json` incluye permisos adicionales:
 > `drive` (listar la carpeta y subir imágenes), `script.external_request`

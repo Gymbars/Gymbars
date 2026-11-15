@@ -172,3 +172,25 @@ test('superficie pública: solo estas funciones pueden llamarse desde el navegad
   const unexpected = found.filter(f => !ALLOWED.has(f.split(': ')[1]));
   assert.deepEqual(unexpected, [], 'funciones públicas no permitidas: ' + unexpected.join(', '));
 });
+
+
+test('entorno: sin GB_ENV es producción; con GB_ENV=staging avisa al panel (la propiedad, no la hoja, manda)', () => {
+  const prod = load();
+  prod.addSession(TOKEN, 'owner@gym.test');
+  assert.equal(prod.ctx.gbEnvironment_(), 'produccion');
+  assert.equal(prod.ctx.cpVerifyAdminAccess(TOKEN).entorno, 'produccion');
+
+  const staging = load({ props: { GB_ENV: ' STAGING ' } });
+  staging.addSession(TOKEN, 'owner@gym.test');
+  assert.equal(staging.ctx.cpVerifyAdminAccess(TOKEN).entorno, 'staging');
+
+  const typo = load({ props: { GB_ENV: 'stagin' } });
+  assert.equal(typo.ctx.gbEnvironment_(), 'produccion', 'un valor desconocido nunca se toma por pruebas');
+});
+
+test('panel: el inicio de sesión le dice a la app de Google a qué implementación regresar (callback)', () => {
+  const html = readFileSync(join(CODE, 'ConfigPanel', 'ConfigPanel.html'), 'utf8');
+  assert.match(html, /'&callback=' \+ encodeURIComponent\(CP_AUTH_CALLBACK_URL\)/);
+  assert.match(html, /cpOnAccessGranted\(res\.email, res\.role, res\.entorno\)/);
+  assert.match(html, /id="cp-env-banner"/);
+});

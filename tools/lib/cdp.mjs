@@ -23,6 +23,7 @@ export async function launchChrome({ width = 1360, height = 900, mobile = false,
   const profile = mkdtempSync(join(tmpdir(), 'gb-chrome-'));
   const proc = spawn(CHROME, [
     '--headless=new', '--disable-gpu', '--hide-scrollbars', '--no-first-run', '--no-default-browser-check',
+    ...(process.env.CI ? ['--no-sandbox', '--disable-dev-shm-usage'] : []),
     '--remote-debugging-port=0', `--user-data-dir=${profile}`, `--window-size=${width},${height}`, ...args, 'about:blank'
   ], { stdio: ['ignore', 'ignore', 'pipe'] });
 

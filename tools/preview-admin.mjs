@@ -32,7 +32,7 @@ let currentRole = 'admin';
 
 // ---------------------------------------------------------------- backend en memoria
 
-const SERVER_FILES = ['Auth.gs', 'Api.gs', 'Schema.gs', 'Repo.gs', 'Rules.gs', 'Members.gs', 'Payments.gs',
+const SERVER_FILES = ['Auth.gs', 'Api.gs', 'Schema.gs', 'Repo.gs', 'Rules.gs', 'Members.gs', 'Payments.gs', 'DemoData.gs',
   'Measurements.gs', 'Evaluations.gs', 'Messaging.gs', 'Attendance.gs', 'Triggers.gs', 'Wallet.gs', 'Pages.gs',
   'Progress.gs', 'Migration.gs', 'Modules.gs'];
 
@@ -51,7 +51,7 @@ function buildBackend() {
   const sheets = {};
   const g = loadGas(SERVER_FILES, {
     owner: OWNER, sheets, activeUser: OWNER, extra: SITE_STUBS,
-    baseUrl: `http://localhost:${PORT}/exec`, props: { GB_REPORT_BASE_URL: `http://localhost:${PORT}/exec` }
+    baseUrl: `http://localhost:${PORT}/exec`, props: { GB_REPORT_BASE_URL: `http://localhost:${PORT}/exec`, ...(USE_DEMO ? { GB_ENV: 'staging' } : {}) }
   });
   const ctx = g.ctx;
   Object.values(ctx.gbSchema_()).forEach(spec => { sheets[spec.name] = memSheet([[...spec.headers]]); });
@@ -72,67 +72,12 @@ function seedFromMigration(b) {
   console.log('Datos REALES de migration/ cargados:', JSON.stringify(result.counts));
 }
 
-/** Datos de ejemplo (sin datos personales) para desarrollar la interfaz. */
+/** Datos de ejemplo (sin datos personales): el mismo cargador que usa el entorno de pruebas (DemoData.gs). */
 function seedDemo(b) {
-  const { ctx } = b;
-  let seed = 42;
-  const rnd = () => { seed = (seed * 1664525 + 1013904223) % 4294967296; return seed / 4294967296; };
-  const pick = list => list[Math.floor(rnd() * list.length)];
-  const today = new Date(); today.setHours(12, 0, 0, 0);
-  const addDays = (d, k) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + k, 12);
-  const names = ['Ana', 'Luis', 'María', 'Carlos', 'Sofía', 'Diego', 'Valeria', 'Jorge', 'Lucía', 'Pedro', 'Camila', 'Andrés',
-    'Daniela', 'Mateo', 'Isabel', 'Héctor', 'Paola', 'Rodrigo', 'Fernanda', 'Gabriel', 'Mónica', 'Esteban', 'Claudia', 'Iván'];
-  const surnames = ['Pérez', 'López', 'García', 'Morales', 'Ramírez', 'Castillo', 'Méndez', 'Hernández', 'Reyes', 'Cruz', 'Ortiz', 'Díaz'];
-  const fees = [100, 130, 135, 140, 150];
-
-  names.forEach((name, i) => {
-    const offsets = [20, 12, 2, -2, -10, -45, null, 25, 8, 1];            // cuándo vence la próxima mensualidad
-    const k = offsets[i % offsets.length];
-    const due = k === null ? null : addDays(today, k);
-    const m = ctx.gbAppend_('members', {
-      DPI: String(2000000000000 + i * 7919), Nombres: name, Apellidos: pick(surnames) + ' ' + pick(surnames),
-      FechaNacimiento: new Date(1975 + Math.floor(rnd() * 30), Math.floor(rnd() * 12), 1 + Math.floor(rnd() * 27), 12),
-      Telefono: String(40000000 + Math.floor(rnd() * 9999999)), Correo: i % 4 === 0 ? name.toLowerCase().replace(/[^a-z]/g, '') + '@mail.test' : '',
-      Genero: i % 3 === 0 ? 'Femenino' : 'Masculino', Mensualidad: pick(fees), DiaPago: due ? due.getDate() : '',
-      Estado: i === 9 ? 'Inactivo' : 'Activo', TokenQR: ctx.gbToken_(24), FechaRegistro: addDays(today, -200), Notas: ''
-    });
-    if (due) {
-      const prev = new Date(due.getFullYear(), due.getMonth() - 1, Math.min(due.getDate(), 28), 12);
-      for (let p = 0; p < 3; p++) {
-        ctx.gbAppend_('payments', { MemberID: m.MemberID, Fecha: new Date(prev.getFullYear(), prev.getMonth() - p, prev.getDate(), 12),
-          Monto: m.Mensualidad, ComprobanteToken: ctx.gbToken_(24) });
-      }
-    }
-    for (let t = 0; t < 4; t++) {
-      const w = 160 - t * 1.5 + rnd();
-      ctx.gbAppend_('measurements', { MemberID: m.MemberID, Fecha: addDays(today, -t * 30 - (i % 12)), Cuello: 37 - t * 0.2, Pecho: 96 + t * 0.3,
-        BrazoDer: 30 + t * 0.2, BrazoIzq: 29.5 + t * 0.2, Cintura: 88 - t, Cadera: 95, PiernaDer: 53, PiernaIzq: 53, PesoLb: Math.round(w * 10) / 10 });
-    }
-    const ev = { MemberID: m.MemberID, Fecha: addDays(today, -40) };
-    ['N01', 'N02', 'N03', 'N04', 'N05', 'N06', 'N07'].forEach((c, j) => { ev[c] = [45, 15, 8, 14, 7, 50, 12][j] + Math.floor(rnd() * 8); });
-    if (i % 2 === 0) ['N11', 'N12', 'N13'].forEach((c, j) => { ev[c] = [3, 40, 3][j]; });
-    ctx.gbAppend_('evaluations', ev);
-  });
-
-  // Control de asistencia en uso desde hace 25 días + visitas recientes.
-  ctx.gbConfigSet_('asistencia_desde', ctx.gbFmtDate_(addDays(today, -25)));
-  const members = ctx.gbList_('members');
-  members.forEach((m, i) => {
-    if (i % 4 === 3) return;                                              // algunos no vienen
-    for (let d = 0; d < 20; d++) {
-      if (rnd() < 0.55) {
-        const day = addDays(today, -d - (i % 3));
-        ctx.gbAppend_('attendance', { MemberID: m.MemberID, FechaHora: day, Fecha: day, Origen: 'QR', DispositivoID: 'DV-001', EstadoAlMomento: 'al_dia' });
-      }
-    }
-  });
-  ctx.gbAppend_('devices', { Nombre: 'Recepción', TokenHash: ctx.gbHash_('demo'), Activo: 'Si', CreadoEn: addDays(today, -10), UltimoUso: today });
-
-  // Algunos mensajes pendientes
-  ['recordatorio_pago', 'pago_vencido', 'inactividad'].forEach((type, i) => {
-    try { ctx.gbQueueMessage_({ type, memberId: members[i * 2 + 2].MemberID, extra: { dias: 12 } }); } catch (_) { /* sin pagos */ }
-  });
-  console.log('Datos de EJEMPLO cargados (' + members.length + ' miembros).');
+  const r = b.ctx.gbSeedDemo_();
+  // Un tablet de ejemplo para las pantallas de Ajustes.
+  b.ctx.gbAppend_('devices', { Nombre: 'Recepción', TokenHash: b.ctx.gbHash_('demo'), Activo: 'Si', CreadoEn: new Date(), UltimoUso: new Date() });
+  console.log('Datos de EJEMPLO cargados (' + r.miembros + ' miembros).');
 }
 
 const backend = buildBackend();

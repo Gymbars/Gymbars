@@ -1,0 +1,5 @@
+[
+  { "file": "opencode.json", "pattern": "ctx7sk", "why": "llave de Context7 ya publicada en git: rotarla y sacarla del repositorio" },
+  { "file": "code/Code.gs", "pattern": "secreto-hex", "why": "secreto del inicio de sesión (valor histórico); rotar con GOOGLE_AUTH_SHARED_SECRET, ver code/GESTION.md" },
+  { "file": "gymbars-auth/Code.gs", "pattern": "secreto-hex", "why": "mismo secreto en el proyecto de inicio de sesión" }
+]

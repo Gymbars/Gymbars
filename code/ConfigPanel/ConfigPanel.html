@@ -143,6 +143,9 @@
     </nav>
 
     <main class="cp-main">
+      <div class="cp-env-banner" id="cp-env-banner" role="status" hidden>
+        PRUEBAS · Este no es el sistema real. Los datos son de ejemplo y no deben ser personas reales.
+      </div>
       <header class="cp-topbar">
         <div class="cp-heading">
           <h1 id="cp-title">Sitio</h1>
@@ -361,7 +364,7 @@
       google.script.run
         .withSuccessHandler(function (res) {
           if (res && res.authorized) {
-            cpOnAccessGranted(res.email, res.role);
+            cpOnAccessGranted(res.email, res.role, res.entorno);
           } else if (res && res.unauthorized) {
             cpShowGateUnauthorized(res.email, res.error);
           } else {
@@ -375,8 +378,11 @@
         .cpVerifyAdminAccess(token);
     }
 
-    function cpOnAccessGranted(email, role) {
+    function cpOnAccessGranted(email, role, entorno) {
       CP.role = role || 'Admin';
+      var banner = document.getElementById('cp-env-banner');
+      if (banner) banner.hidden = entorno !== 'staging';
+      if (entorno === 'staging') document.title = 'PRUEBAS · ' + document.title;
       var gate = document.getElementById('cp-auth-gate');
       if (gate) gate.style.display = 'none';
 
@@ -455,9 +461,12 @@
         ? crypto.randomUUID().replace(/-/g, '')
         : 'admin_' + Math.random().toString(36).substring(2) + Date.now().toString(36);
 
+      // `callback` le dice a la app de inicio de sesión a QUÉ implementación regresar (producción o
+      // pruebas); sin él siempre volvería a la de producción.
       var authTarget = CP_GOOGLE_AUTH_URL +
         (CP_GOOGLE_AUTH_URL.indexOf('?') === -1 ? '?' : '&') +
-        'nonce=' + encodeURIComponent(nonce);
+        'nonce=' + encodeURIComponent(nonce) +
+        (CP_AUTH_CALLBACK_URL ? '&callback=' + encodeURIComponent(CP_AUTH_CALLBACK_URL) : '');
 
       var popup = null;
       try {
@@ -499,7 +508,7 @@
               google.script.run
                 .withSuccessHandler(function (authRes) {
                   if (authRes && authRes.authorized) {
-                    cpOnAccessGranted(authRes.email, authRes.role);
+                    cpOnAccessGranted(authRes.email, authRes.role, authRes.entorno);
                   } else if (authRes && authRes.unauthorized) {
                     cpShowGateUnauthorized(authRes.email, authRes.error);
                   } else {

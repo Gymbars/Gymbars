@@ -45,3 +45,6 @@ Thumbs.db
 
 # Capturas generadas por tools/ui-check.mjs
 /ui-shots/
+
+# Registro local de despliegues
+.deploy-log.jsonl

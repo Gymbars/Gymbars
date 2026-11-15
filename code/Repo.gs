@@ -266,6 +266,38 @@ function gbAppend_(key, obj) {
 }
 
 /**
+ * Agrega muchas filas de una vez (una sola lectura y una sola escritura).
+ * Para cargas grandes; gbAppend_ lee la tabla en cada fila y sería lento.
+ * @return {Object[]} Las filas guardadas, con sus IDs.
+ */
+function gbBulkAppend_(key, objs) {
+  var spec = gbSpec_(key);
+  if (!objs.length) return [];
+  return gbWithLock_(function () {
+    var sheet = gbSheet_(key);
+    var map = gbHeaderMap_(sheet, spec);
+    var width = Math.max(sheet.getLastColumn(), spec.headers.length);
+    var firstRow = Math.max(sheet.getLastRow(), 1) + 1;
+
+    var counterSource = spec.id ? gbList_(key) : [];
+    var saved = objs.map(function (obj) {
+      var record = {};
+      spec.headers.forEach(function (h) { record[h] = obj[h]; });
+      if (spec.id && !String(record[spec.id.field] == null ? '' : record[spec.id.field]).trim()) {
+        record[spec.id.field] = gbNextId_(spec, counterSource);
+      }
+      if (spec.id) counterSource.push(record);       // el siguiente ID sale de este
+      return record;
+    });
+
+    gbEnsureRows_(sheet, spec, firstRow + saved.length - 1);
+    sheet.getRange(firstRow, 1, saved.length, width).setValues(saved.map(function (r) { return gbRowArray_(spec, map, width, r); }));
+    saved.forEach(function (r, i) { r._row = firstRow + i; });
+    return saved;
+  });
+}
+
+/**
  * Actualiza campos de una fila identificada por su ID (o por número de fila).
  * Solo escribe las celdas indicadas en `patch`.
  * @return {Object|null} La fila actualizada, o null si no existe.
