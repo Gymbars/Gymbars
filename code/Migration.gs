@@ -237,15 +237,20 @@ function gbMigrationVerify_() {
   var ids = {}, dpis = {}, tokens = {};
   members.forEach(function (m) {
     var ref = 'Miembros fila ' + m._row;
-    if (typeof m.DPI !== 'string') issues.push(ref + ': el DPI está guardado como número (debe ser texto; formatea la columna como Texto sin formato).');
-    if (!/^\d{13}$/.test(String(m.DPI))) issues.push(ref + ': el DPI no tiene 13 dígitos.');
+    var noDpi = String(m.DPI || '') === '';
+    var minor = (function () {                                  // menor de 18: la fecha de nacimiento es posterior a hace 18 años
+      var b = gbParseDate_(m.FechaNacimiento), t = gbParseDate_(gbToday_());
+      return !!(b && t && new Date(b.getFullYear() + 18, b.getMonth(), b.getDate()) > t);
+    })();
+    if (!noDpi && typeof m.DPI !== 'string') issues.push(ref + ': el DPI está guardado como número (debe ser texto; formatea la columna como Texto sin formato).');
+    if (noDpi ? !minor : !/^\d{13}$/.test(String(m.DPI))) issues.push(ref + ': ' + (noDpi ? 'sin DPI (solo se permite en menores de 18 años).' : 'el DPI no tiene 13 dígitos.'));
     if (!/^\d{8}$/.test(String(m.Telefono))) issues.push(ref + ': teléfono sin 8 dígitos.');
     if (ids[m.MemberID]) issues.push(ref + ': MemberID repetido.');
-    if (dpis[m.DPI]) issues.push(ref + ': DPI repetido.');
+    if (!noDpi && dpis[m.DPI]) issues.push(ref + ': DPI repetido.');
     if (!m.TokenQR) issues.push(ref + ': sin TokenQR.');
     else if (tokens[m.TokenQR]) issues.push(ref + ': TokenQR repetido.');
     if (['Activo', 'Inactivo', 'Suspendido'].indexOf(m.Estado) === -1) issues.push(ref + ': Estado no válido.');
-    ids[m.MemberID] = true; dpis[m.DPI] = true; tokens[m.TokenQR] = true;
+    ids[m.MemberID] = true; if (!noDpi) dpis[m.DPI] = true; tokens[m.TokenQR] = true;
   });
 
   [['Pagos', payments], ['Medidas', measurements], ['Evaluaciones', evaluations]].forEach(function (pair) {

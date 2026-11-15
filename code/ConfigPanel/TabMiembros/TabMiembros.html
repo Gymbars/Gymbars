@@ -155,7 +155,7 @@
     var lastPay = admin && d.pagos && d.pagos.length ? d.pagos[0] : null;
     var kv = [
       ['ID', cpEsc(m.memberId)],
-      ['DPI', cpEsc(admin ? m.dpi : m.dpiMasked)],
+      ['DPI', (admin ? m.dpi : m.dpiMasked) ? cpEsc(admin ? m.dpi : m.dpiMasked) : '<span class="cp-hint">Sin DPI' + (m.edad !== '' && m.edad < 18 ? ' (menor de edad)' : '') + '</span>'],
       ['Teléfono', cpEsc(m.telefono.replace(/^(\d{4})(\d{4})$/, '$1-$2')) + (m.telefonoWa ? '' : ' <span class="cp-gb-chip is-warn">sin WhatsApp</span>')],
       ['Correo', m.correo ? cpEsc(m.correo) : '<span class="cp-hint">—</span>'],
       ['Edad', m.edad !== '' ? m.edad + ' años <span class="cp-hint">(' + gbDate(m.fechaNacimiento) + ')</span>' : '—'],
@@ -341,7 +341,7 @@
     var m = member || { nombres: '', apellidos: '', dpi: '', fechaNacimiento: '', telefono: '', correo: '', genero: '', mensualidad: '', diaPago: new Date().getDate(), estado: 'Activo', notas: '' };
     var dpiField = (!isNew && !admin)
       ? gbField({ name: 'dpiVista', label: 'DPI', value: m.dpiMasked, attrs: 'disabled', hint: 'Solo un administrador puede ver o cambiar el DPI.' })
-      : gbField({ name: 'dpi', label: 'DPI', value: m.dpi, attrs: 'inputmode="numeric" maxlength="13" autocomplete="off"', hint: '13 dígitos, sin guiones.' });
+      : gbField({ name: 'dpi', label: 'DPI', value: m.dpi, attrs: 'inputmode="numeric" maxlength="13" autocomplete="off"', hint: '13 dígitos, sin guiones. Si es menor de 18 años puedes dejarlo vacío.' });
 
     var body = '<div class="cp-gb-form">' +
       gbField({ name: 'nombres', label: 'Nombres', value: m.nombres }) +

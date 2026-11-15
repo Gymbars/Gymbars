@@ -796,6 +796,28 @@
      * @param {Array} args
      * @param {{busy?: (boolean|string), ok?: Function, fail?: Function}} [handlers]
      */
+    // El botón o fila que acaba de tocar la persona muestra un indicador mientras llega la respuesta
+    // (así se ve que algo está pasando incluso cuando la pantalla todavía no cambia).
+    document.addEventListener('click', function (e) {
+      var el = e.target && e.target.closest ? e.target.closest('.cp-btn, .cp-gb-row') : null;
+      CPL.click = el ? { el: el, t: Date.now() } : null;
+    }, true);
+
+    function cpTappedControl() {
+      var c = CPL.click;
+      if (!c || Date.now() - c.t > 400 || !document.body.contains(c.el)) return null;
+      c.el.__cpLoads = (c.el.__cpLoads || 0) + 1;
+      c.el.classList.add('is-loading');
+      c.el.setAttribute('aria-busy', 'true');
+      return c.el;
+    }
+
+    function cpControlIdle(el) {
+      if (!el) return;
+      el.__cpLoads = Math.max(0, (el.__cpLoads || 1) - 1);
+      if (!el.__cpLoads) { el.classList.remove('is-loading'); el.removeAttribute('aria-busy'); }
+    }
+
     function cpRun(fn, args, handlers) {
       handlers = handlers || {};
       var isRead = handlers.busy === false;            // lecturas: solo la barra, sin bloquear
@@ -812,7 +834,8 @@
       if (key) CPL.inflight[key] = true;
 
       var token = cpLoaderStart(block, scope);
-      var finish = function () { cpLoaderEnd(token); if (key) delete CPL.inflight[key]; };
+      var tapped = cpTappedControl();
+      var finish = function () { cpLoaderEnd(token); cpControlIdle(tapped); if (key) delete CPL.inflight[key]; };
 
       google.script.run
         .withSuccessHandler(function (result) {
@@ -906,7 +929,7 @@
     //   - lecturas (buscar, listar): solo la barra, sin bloquear nada;
     //   - acciones que modifican datos: además bloquean la ventana o pestaña activa con un
     //     indicador giratorio, y un segundo envío idéntico se ignora (no se duplica nada).
-    var CPL = { pending: 0, timer: null, inflight: {}, legacy: [], followScope: null };
+    var CPL = { pending: 0, timer: null, inflight: {}, legacy: [], followScope: null, click: null };
 
     /** Elemento que se bloquea: el indicado, la ventana abierta más reciente o la pestaña activa. */
     function cpLoaderScope(preferred) {

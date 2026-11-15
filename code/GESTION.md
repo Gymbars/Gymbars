@@ -115,6 +115,9 @@ y ≥ N días sin asistir, **solo si el control de asistencia ya está en uso**)
 - **Sin doble clic:** mientras una acción que guarda está en curso, la ventana queda bloqueada y una segunda petición idéntica se ignora.
 - **Avisos:** todo error o confirmación sale como aviso (toast); los errores inesperados del navegador también.
 - **Búsqueda de miembros:** filtra mientras escribes usando la lista en memoria (sin tildes ni mayúsculas, sin llamar al servidor). El entrenador no tiene el DPI completo en su lista: si escribe uno completo, el servidor lo busca. Mismo buscador en Miembros y Asistencia; Enter abre el primer resultado.
+- **Botones:** el botón o la fila que tocas muestra un indicador mientras llegan los datos (abrir plantillas, fichas, listas…).
+- **Guardar en el teléfono:** en las pestañas del sitio, «Guardar cambios» aparece como barra fija abajo mientras haya cambios sin guardar. Los formularios (ventanas) mantienen sus botones fijos al pie.
+- **DPI:** obligatorio desde los 18 años; opcional para menores (la fecha de nacimiento decide). Si se escribe, debe tener 13 dígitos y no repetirse. Al cumplir 18, la próxima vez que se edite se pide el DPI.
 - **Carnet:** el aviso de Wallet de Apple solo aparece en iPhone; el botón de Google Wallet solo si está configurado.
 
 ## Reglas de negocio (del Excel)

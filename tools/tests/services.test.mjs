@@ -141,6 +141,39 @@ test('miembros: alta correcta genera ID, token y estado Activo; DPI repetido se 
   assert.match(dup.errors.dpi, /Ya existe un miembro con ese DPI \(GB-0001\)/);
 });
 
+test('miembros: el DPI es opcional para menores de 18 y obligatorio para adultos', () => {
+  const { admin, coach, ctx, plain } = env();
+  const today = ctx.gbToday_();                                   // aaaa-mm-dd
+  const yearsAgo = (n, dayShift = 0) => {
+    const d = new Date(today + 'T12:00:00'); d.setFullYear(d.getFullYear() - n); d.setDate(d.getDate() + dayShift);
+    return d.toISOString().slice(0, 10);
+  };
+  // Adulto sin DPI: se rechaza con un mensaje claro
+  const adult = plain(admin('members.save', form(1, { dpi: '', fechaNacimiento: yearsAgo(30) })));
+  assert.equal(adult.ok, false);
+  assert.match(adult.errors.dpi, /obligatorio/);
+  // Justo 18 años hoy: ya es adulto. Un día antes de cumplirlos: sigue siendo menor.
+  assert.equal(plain(admin('members.save', form(2, { dpi: '', fechaNacimiento: yearsAgo(18) }))).ok, false);
+  const almost = plain(admin('members.save', form(3, { dpi: '', fechaNacimiento: yearsAgo(18, 1) })));
+  assert.equal(almost.ok, true, 'a un día de cumplir 18 todavía es menor');
+  // Dos menores sin DPI conviven (el vacío no cuenta como repetido)
+  const kid2 = plain(admin('members.save', form(4, { dpi: '', fechaNacimiento: yearsAgo(10) })));
+  assert.equal(kid2.ok, true);
+  assert.equal(kid2.member.dpi, '');
+  assert.equal(kid2.member.dpiMasked, '');
+  // Si escribe un DPI, debe ser válido (13 dígitos) y único, también en menores
+  assert.match(plain(admin('members.save', form(5, { dpi: '123', fechaNacimiento: yearsAgo(10) }))).errors.dpi, /13 dígitos/);
+  // Al cumplir 18, editarlo exige el DPI; el entrenador puede editar al menor sin tocar el DPI
+  const edit = plain(coach('members.save', { ...form(4, { dpi: '', fechaNacimiento: yearsAgo(10) }), memberId: kid2.member.memberId, notas: 'natación' }));
+  assert.equal(edit.ok, true);
+  const grown = plain(admin('members.save', { ...form(4, { dpi: '', fechaNacimiento: yearsAgo(20) }), memberId: kid2.member.memberId }));
+  assert.equal(grown.ok, false);
+  assert.match(grown.errors.dpi, /obligatorio/);
+  // La búsqueda y la ficha siguen funcionando sin DPI
+  assert.equal(plain(admin('members.search', kid2.member.memberId, {})).items.length, 1);
+  assert.equal(plain(admin('members.get', kid2.member.memberId)).member.dpi, '');
+});
+
 test('miembros: editar cambia datos; el DPI puede conservarse y no se duplica', () => {
   const { admin, plain } = env();
   admin('members.save', form(1));

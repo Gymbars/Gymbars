@@ -166,6 +166,9 @@ function gbAttendanceSummary_(memberId) {
  * Valida los datos de un formulario de miembro.
  * @return {{errors:Object<string,string>, clean:Object}}
  */
+/** Edad desde la cual el DPI es obligatorio. */
+var GB_ADULT_AGE = 18;
+
 function gbValidateMember_(input, existing, allMembers) {
   var errors = {};
   var clean = {};
@@ -176,25 +179,30 @@ function gbValidateMember_(input, existing, allMembers) {
   clean.Apellidos = String(input.apellidos == null ? '' : input.apellidos).replace(/\s+/g, ' ').trim();
   if (!clean.Apellidos) errors.apellidos = 'Completa el campo Apellidos.';
 
-  if (existing && !gbIsAdmin_()) {
-    // Un entrenador no ve el DPI completo: al editar se conserva el que ya está guardado.
-    clean.DPI = String(existing.DPI);
-  } else {
-    clean.DPI = gbNormDpi_(input.dpi);
-  }
-  if (!(existing && !gbIsAdmin_()) && clean.DPI.length !== 13) {
-    errors.dpi = 'El DPI debe tener 13 dígitos.';
-  } else if (!(existing && !gbIsAdmin_())) {
-    var dup = allMembers.filter(function (m) {
-      return String(m.DPI) === clean.DPI && (!existing || m.MemberID !== existing.MemberID);
-    })[0];
-    if (dup) errors.dpi = 'Ya existe un miembro con ese DPI (' + dup.MemberID + ').';
-  }
-
   var birth = gbParseDate_(input.fechaNacimiento);
   if (!birth) errors.fechaNacimiento = 'Indica la fecha de nacimiento.';
   else if (birth > today || birth.getFullYear() < 1900) errors.fechaNacimiento = 'La fecha de nacimiento no es válida.';
   clean.FechaNacimiento = birth || '';
+
+  // DPI: obligatorio desde los 18 años; opcional para menores (todavía no tienen). Si se escribe, debe ser válido y único.
+  var age = birth && !errors.fechaNacimiento ? gbAge_(birth, gbToday_()) : '';
+  var isMinor = age !== '' && age < GB_ADULT_AGE;
+  if (existing && !gbIsAdmin_()) {
+    // Un entrenador no ve el DPI completo: al editar se conserva el que ya está guardado.
+    clean.DPI = String(existing.DPI || '');
+  } else {
+    clean.DPI = gbNormDpi_(input.dpi);
+    if (!clean.DPI) {
+      if (!isMinor) errors.dpi = 'El DPI es obligatorio (13 dígitos). Solo es opcional para menores de ' + GB_ADULT_AGE + ' años.';
+    } else if (clean.DPI.length !== 13) {
+      errors.dpi = 'El DPI debe tener 13 dígitos.';
+    } else {
+      var dup = allMembers.filter(function (m) {
+        return String(m.DPI) === clean.DPI && (!existing || m.MemberID !== existing.MemberID);
+      })[0];
+      if (dup) errors.dpi = 'Ya existe un miembro con ese DPI (' + dup.MemberID + ').';
+    }
+  }
 
   clean.Telefono = gbNormPhone_(input.telefono);
   if (clean.Telefono.length !== 8) errors.telefono = 'El teléfono debe tener 8 dígitos.';

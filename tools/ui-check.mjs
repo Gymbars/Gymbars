@@ -162,6 +162,30 @@ try {
     log('Miembro nuevo creado: ' + (await b.text('.cp-gb-modal-head h2')));
     await b.evaluate(`document.querySelectorAll('.cp-gb-modal').forEach(function(m){ m.remove(); }); GB.modals.length = 0;`);
 
+    // --- DPI: obligatorio para adultos, opcional para menores de 18
+    await b.click('#gb-m-new');
+    await b.waitFor('.cp-gb-modal [name="nombres"]');
+    const fillKid = async birth => {
+      await b.type('[name="nombres"]', 'Niño');
+      await b.type('[name="apellidos"]', 'Sin Documento');
+      await b.type('[name="fechaNacimiento"]', birth);
+      await b.type('[name="telefono"]', '45670011');
+      await b.type('[name="genero"]', 'Masculino');
+      await b.type('[name="mensualidad"]', '100');
+      await b.type('[name="diaPago"]', '12');
+    };
+    await fillKid('1990-01-01');
+    await b.click('.cp-gb-modal:last-of-type .cp-gb-modal-foot .cp-btn--primary');
+    await b.waitFor('.cp-gb-field.has-error [name="dpi"]');
+    assert.match(await b.text('[data-err="dpi"]'), /obligatorio/);
+    await b.type('[name="fechaNacimiento"]', new Date(Date.now() - 10 * 365.25 * 864e5).toISOString().slice(0, 10));
+    await b.click('.cp-gb-modal:last-of-type .cp-gb-modal-foot .cp-btn--primary');
+    await b.waitFor('.cp-gb-modal [data-act="pay"]');
+    assert.match(await b.text('.cp-gb-modal-head h2'), /Niño/);
+    assert.match(await b.text('.cp-gb-modal'), /Sin DPI \(menor de edad\)/);
+    log('Adulto sin DPI se rechaza; un menor se registra sin DPI');
+    await b.evaluate(`document.querySelectorAll('.cp-gb-modal').forEach(function(m){ m.remove(); }); GB.modals.length = 0;`);
+
     // --- Mensajes
     await b.click('[data-tab="mensajes"]');
     await b.waitFor('#gb-ms-list .cp-gb-msg');
@@ -274,6 +298,19 @@ try {
       await b.type('#gb-a-q', 'maria');
       await b.waitFor('#gb-a-results [data-visit]');
       log('Asistencia: el mismo buscador, también instantáneo');
+
+      // --- El botón tocado muestra que trabaja (plantillas tardaban en abrir sin ninguna señal)
+      await b.click('[data-tab="mensajes"]');
+      await b.waitFor('#gb-ms-templates');
+      await b.waitFor('!document.getElementById("cp-progress").classList.contains("is-on")');
+      await b.click('#gb-ms-templates');
+      await sleep(300);
+      assert.equal(await b.evaluate(`document.getElementById('gb-ms-templates').classList.contains('is-loading')`), true, 'el botón muestra carga');
+      assert.equal(await b.evaluate(`getComputedStyle(document.getElementById('gb-ms-templates'), '::after').content`), '""', 'con indicador visible');
+      await b.waitFor('#gb-tpl-text', 20000);
+      await b.waitFor('!document.getElementById("gb-ms-templates").classList.contains("is-loading")');
+      log('Plantillas: el botón muestra carga mientras abre y la recupera después');
+      await b.evaluate(`document.querySelectorAll('.cp-gb-modal').forEach(function(m){ m.remove(); }); GB.modals.length = 0;`);
 
       // --- Avisos: error del servidor y error inesperado del navegador
       await b.evaluate(`gbCall('members.get', ['GB-9999'], function () {})`);
@@ -485,6 +522,13 @@ try {
     await m.click('#gb-m-list .cp-gb-row');
     await m.waitFor('.cp-gb-modal .cp-gb-kv');
     await m.shot(join(OUT, '32-movil-ficha.png'));
+    // «Guardar cambios»: barra fija abajo cuando hay cambios, aunque la página esté desplazada
+    await m.evaluate(`document.querySelectorAll('.cp-gb-modal').forEach(function(x){ x.remove(); }); GB.modals.length = 0; CP_TABS[CP.tab].save = true; document.getElementById('cp-save').hidden = false; cpMarkDirty(); document.getElementById('cp-body').scrollTop = 600; window.scrollTo(0, 600); true`);
+    await sleep(300);
+    const bar = JSON.parse(await m.evaluate(`(function(){ var e = document.getElementById('cp-save'), r = e.getBoundingClientRect(), c = getComputedStyle(e); return JSON.stringify({ shown: c.display !== 'none', fixed: c.position === 'fixed', inView: r.top >= 0 && r.bottom <= innerHeight, wide: r.width > 250 }); })()`));
+    assert.deepEqual(bar, { shown: true, fixed: true, inView: true, wide: true }, 'barra de guardar visible en el teléfono: ' + JSON.stringify(bar));
+    await m.shot(join(OUT, '33-movil-guardar.png'));
+    log('Móvil: «Guardar cambios» queda fijo y visible abajo');
     const overflow = await m.evaluate('document.documentElement.scrollWidth > document.documentElement.clientWidth');
     assert.equal(overflow, false, 'sin desplazamiento horizontal de la página');
     log('Sin desbordamiento horizontal');
