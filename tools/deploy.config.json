@@ -2,8 +2,8 @@
   "staging": {
     "branch": "develop",
     "clasp": "code/.clasp.staging.json",
-    "deploymentId": "",
-    "url": ""
+    "deploymentId": "AKfycbyApuZunWwi2p3ZPb43wOluXpC7cVppYVd5k6smkjZBJTXoS6cWDiUgTorPi4jmSvlM",
+    "url": "https://script.google.com/macros/s/AKfycbyApuZunWwi2p3ZPb43wOluXpC7cVppYVd5k6smkjZBJTXoS6cWDiUgTorPi4jmSvlM/exec"
   },
   "prod": {
     "branch": "master",
