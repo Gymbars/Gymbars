@@ -516,6 +516,15 @@ try {
     await m.waitFor('#gb-progress .cp-gb-stat');
     await m.shot(join(OUT, '30-movil-progreso.png'));
     await m.click('#cp-menu-toggle');
+    await sleep(350);
+    const menu = JSON.parse(await m.evaluate(`(function () {
+      var rail = document.getElementById('cp-rail'), bar = document.querySelector('.cp-topbar').getBoundingClientRect(), r = rail.getBoundingClientRect();
+      var label = rail.querySelector('.cp-nav-label').getBoundingClientRect(), first = rail.querySelector('.cp-nav-item').getBoundingClientRect();
+      return JSON.stringify({ belowBar: r.top >= bar.bottom - 1, labelVisible: label.top >= r.top && label.height > 0, firstItemVisible: first.top >= r.top + label.height, gap: Math.round(label.top - r.top) });
+    })()`));
+    assert.ok(menu.belowBar && menu.labelVisible && menu.firstItemVisible && menu.gap >= 8, 'el menú no queda tapado por la barra: ' + JSON.stringify(menu));
+    await m.shot(join(OUT, '35-movil-menu.png'));
+    log('Móvil: el menú empieza bajo la barra; se ve «Gimnasio» y «Progreso» completos');
     await m.click('[data-tab="miembros"]');
     await m.waitFor('#gb-m-list .cp-gb-row');
     await m.shot(join(OUT, '31-movil-miembros.png'));

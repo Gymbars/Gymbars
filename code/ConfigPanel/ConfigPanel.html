@@ -743,6 +743,16 @@
       var scrim = document.getElementById('cp-menu-scrim');
       if (!rail) return;
       if (open === undefined) open = !rail.classList.contains('is-open');
+      if (open) {
+        // El menú empieza justo debajo de la barra superior, también cuando arriba hay un aviso (por ejemplo el de pruebas).
+        var topbar = document.querySelector('.cp-topbar');
+        if (topbar && window.matchMedia('(max-width: 900px)').matches) {
+          var below = Math.ceil(topbar.getBoundingClientRect().bottom);
+          rail.style.top = below + 'px';
+          rail.style.maxHeight = 'calc(100dvh - ' + below + 'px - 12px)';
+        }
+        rail.scrollTop = 0;
+      }
       rail.classList.toggle('is-open', open);
       if (scrim) scrim.classList.toggle('is-open', open);
       if (button) {
