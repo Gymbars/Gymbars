@@ -522,11 +522,25 @@ try {
     await m.click('#gb-m-list .cp-gb-row');
     await m.waitFor('.cp-gb-modal .cp-gb-kv');
     await m.shot(join(OUT, '32-movil-ficha.png'));
-    // «Guardar cambios» va al final del formulario y queda pegado abajo; la barra superior solo trae correo y salir
+    // La ficha ocupa todo su contenido: el fondo no se corta y lo último (Editar datos, Eliminar…) queda a la vista
+    await m.evaluate(`var mo = document.querySelector('.cp-gb-modal:last-of-type'); mo.scrollTop = mo.scrollHeight; true`);
+    await sleep(250);
+    const ficha = JSON.parse(await m.evaluate(`(function () {
+      var mo = document.querySelector('.cp-gb-modal:last-of-type'), card = mo.querySelector('.cp-gb-modal-card'), foot = mo.querySelector('.cp-gb-modal-foot');
+      var btns = mo.querySelectorAll('.cp-gb-modal-body [data-act]'), last = btns[btns.length - 1].getBoundingClientRect();
+      var limit = foot ? foot.getBoundingClientRect().top : innerHeight;
+      return JSON.stringify({ scrolls: mo.scrollHeight > mo.clientHeight + 50, cardCoversContent: card.getBoundingClientRect().height >= mo.scrollHeight - 1, lastButtonVisible: last.bottom <= limit && last.top >= 0, gap: Math.round(limit - last.bottom) });
+    })()`));
+    assert.ok(ficha.scrolls, 'la ficha es más larga que la pantalla (si no, la prueba no mide nada)');
+    assert.ok(ficha.cardCoversContent, 'el fondo de la ficha cubre todo el contenido: ' + JSON.stringify(ficha));
+    assert.ok(ficha.lastButtonVisible && ficha.gap >= 16, 'el último botón no queda tapado y tiene espacio abajo: ' + JSON.stringify(ficha));
+    await m.shot(join(OUT, '34-movil-ficha-final.png'));
+    log('Móvil: la ficha mantiene su fondo hasta el final y deja espacio bajo el último botón (' + ficha.gap + ' px)');
+    // «Guardar cambios» va al final del formulario (no flota); la barra superior solo trae correo y salir
     await m.evaluate(`document.querySelectorAll('.cp-gb-modal').forEach(function(x){ x.remove(); }); GB.modals.length = 0; cpSwitchTab('sitio', true); cpMarkDirty(); true`);
     await sleep(400);
     const bar = JSON.parse(await m.evaluate(`(function(){ var e = document.querySelector('#pane-sitio .cp-save-btn'), r = e.getBoundingClientRect(), p = getComputedStyle(e.parentNode); return JSON.stringify({ sticky: p.position === 'sticky', inView: r.top >= 0 && r.bottom <= innerHeight, wide: r.width > 250, note: !document.querySelector('#pane-sitio .cp-dirty').hidden, topbarButtons: document.querySelectorAll('.cp-topbar .cp-btn--primary, .cp-topbar #cp-save, .cp-topbar .cp-dirty').length }); })()`));
-    assert.deepEqual(bar, { sticky: true, inView: true, wide: true, note: true, topbarButtons: 0 }, 'guardar visible al final del formulario: ' + JSON.stringify(bar));
+    assert.deepEqual(bar, { sticky: false, inView: true, wide: true, note: true, topbarButtons: 0 }, 'guardar visible al final del formulario: ' + JSON.stringify(bar));
     await m.shot(join(OUT, '33-movil-guardar.png'));
     log('Móvil: «Guardar cambios» al final del formulario, visible; sin botón arriba');
     const overflow = await m.evaluate('document.documentElement.scrollWidth > document.documentElement.clientWidth');

@@ -2401,9 +2401,10 @@
     .cp-gb-row > :nth-child(4) { grid-column: 2; grid-row: 1 / span 2; }
     .cp-gb-cols { grid-template-columns: 1fr; }
     .cp-gb-form, .cp-gb-level .cp-gb-form { grid-template-columns: 1fr 1fr; }
-    .cp-gb-modal { padding: 0; align-items: stretch; }
+    .cp-gb-modal { padding: 0; align-items: flex-start; }
     .cp-gb-modal-card, .cp-gb-modal-card.is-lg, .cp-gb-modal-card.is-sm { width: 100%; min-height: 100%; border-radius: 0; }
     .cp-gb-modal-foot { border-radius: 0; position: sticky; bottom: 0; }
+    .cp-gb-modal-body { padding-bottom: calc(28px + env(safe-area-inset-bottom, 0px)); }
     .cp-gb-search { max-width: none; }
   }
 
@@ -2502,12 +2503,10 @@
   }
   .cp-gb-row.is-loading { opacity: 0.6; pointer-events: none; }
 
-  /* «Guardar cambios»: al final de cada formulario y pegado al borde inferior mientras se recorre. */
+  /* «Guardar cambios»: al final de cada formulario (al recorrer la página se llega a él). */
   .cp-savebar {
-    position: sticky; bottom: 0; z-index: 20;
     display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 10px 14px;
-    margin-top: 24px; padding: 14px 0 calc(14px + env(safe-area-inset-bottom, 0px));
-    background: linear-gradient(to top, var(--cp-bg) 72%, rgba(241, 242, 244, 0));
+    margin-top: 24px; padding: 0 0 calc(24px + env(safe-area-inset-bottom, 0px));
   }
   .cp-savebar .cp-btn { min-height: 44px; padding: 0 22px; font-weight: 700; }
   @media (max-width: 900px) {
