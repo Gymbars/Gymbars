@@ -57,6 +57,7 @@ function gbModuleActions_(ADMIN, ANY) {
 
     // --- Carnet / pase de Wallet ---
     'wallet.carnet':         { roles: ANY,   fn: gbCarnetInfo_ },
+    'wallet.check':          { roles: ADMIN, fn: gbWalletCheck_ },
 
     // --- Progreso (panorama del día) ---
     'progress.overview':     { roles: ANY,   fn: gbProgressOverview_ },

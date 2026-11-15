@@ -251,10 +251,9 @@
     gbModal({
       title: opts.title || 'Confirmar', size: 'sm', autofocus: false,
       body: '<p style="font-size:13.5px;line-height:1.5">' + cpEsc(message) + '</p>' + (opts.html || ''),
-      foot: [
-        { label: 'Cancelar', onClick: function (m) { m.close(); } },
+      foot: (opts.hideCancel ? [] : [{ label: 'Cancelar', onClick: function (m) { m.close(); } }]).concat([
         { label: opts.okLabel || 'Aceptar', kind: opts.danger ? 'danger' : 'primary', onClick: function (m) { m.close(); cb(true); } }
-      ]
+      ])
     });
   }
 

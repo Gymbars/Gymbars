@@ -187,7 +187,8 @@
     var box = document.getElementById('gb-s-config');
     var keys = Object.keys(c.reglas);
     box.innerHTML = '<div class="cp-gb-section-head"><h3>Configuración</h3>' +
-      '<button type="button" class="cp-btn cp-btn--small" id="gb-s-tpl">Plantillas de mensajes</button></div>' +
+      '<span><button type="button" class="cp-btn cp-btn--small" id="gb-s-wallet">Probar Google Wallet</button> ' +
+      '<button type="button" class="cp-btn cp-btn--small" id="gb-s-tpl">Plantillas de mensajes</button></span></div>' +
       '<div class="cp-gb-form" id="gb-s-form">' + keys.map(function (k) {
         var rule = c.reglas[k];
         var attrs = rule.type === 'int' ? 'type="number" min="' + rule.min + '" max="' + rule.max + '" step="1" inputmode="numeric"' : '';
@@ -200,6 +201,11 @@
       '<div class="cp-toolbar" style="margin:16px 0 0"><button type="button" class="cp-btn cp-btn--primary" id="gb-s-save">Guardar configuración</button></div>';
 
     document.getElementById('gb-s-tpl').onclick = gbTemplatesEditor;
+    document.getElementById('gb-s-wallet').onclick = function () {
+      gbCall('wallet.check', [], function (r) {
+        gbConfirm(r.message, { title: r.ok ? 'Google Wallet: listo' : 'Google Wallet: falta algo', okLabel: 'Entendido', hideCancel: true }, function () {});
+      });
+    };
     document.getElementById('gb-s-save').onclick = function () {
       var form = document.getElementById('gb-s-form');
       var data = gbFormData(form);

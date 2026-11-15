@@ -254,7 +254,9 @@ function gbCarnetPage_(token) {
     '<div class="card"><div class="row"><span>Mensualidad</span><b class="' + cls + '">' + gbEsc_(status.label) + '</b></div>' +
     (status.nextDue ? '<div class="row"><span>Próximo pago</span><b>' + gbEsc_(gbHumanDate_(status.nextDue)) + '</b></div>' : '') + '</div>' +
     gbCarnetReports_(member) +
-    (wallet ? '<a class="btn" href="' + gbEsc_(wallet) + '" target="_blank" rel="noopener">Agregar a Google Wallet</a>' : '') +
+    (wallet ? '<a class="btn" href="' + gbEsc_(wallet) + '" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:center;gap:10px">' +
+      '<svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="3" fill="#4285F4"/><rect x="2" y="9" width="20" height="3" fill="#1a5fd0"/><circle cx="17" cy="15" r="1.7" fill="#fff"/></svg>' +
+      'Agregar a Google Wallet</a>' : '') +
     '<a class="btn ghost" id="dl" href="#" download="carnet-gymbars.png">Descargar mi QR</a>' +
     '<div class="card muted" style="font-size:14px"><b style="color:var(--text)">Cómo usarlo</b><br>' +
     'Muestra este código en el tablet de la entrada para registrar tu asistencia. Si lo escaneas con la cámara de tu teléfono, abre esta misma página. ' +

@@ -843,3 +843,34 @@ test('QR: el enlace personal y el formato corto registran la misma asistencia; o
   assert.equal(r.status, 'ok', 'el enlace del QR registra la visita');
   assert.equal(h.ctx.gbScanApi_ && h.plain(h.ctx.gbScanApi_({ action: 'scan', device, code: 'GB1:' + m.TokenQR })).status, 'duplicado', 'mismo miembro por el formato corto: ya registrado');
 });
+
+
+test('wallet: la comprobación explica qué falta (sin configurar, clave rechazada, sin acceso, emisor inexistente, listo)', () => {
+  const h = env();
+  assert.equal(h.plain(h.admin('wallet.check')).paso, 'config');
+  assert.throws(() => h.coach('wallet.check'), /PERM/);
+
+  const { privateKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
+  h.props.set('GB_WALLET_ISSUER_ID', '3388000000012345');
+  h.props.set('GB_WALLET_SA', JSON.stringify({ client_email: 'w@p.iam.gserviceaccount.com', private_key: privateKey.export({ type: 'pkcs8', format: 'pem' }) }));
+  const calls = [];
+  const answer = (tokenCode, issuerCode, issuerBody) => {
+    h.ctx.UrlFetchApp = { fetch: (url) => {
+      calls.push(url);
+      const isToken = url.includes('oauth2');
+      const code = isToken ? tokenCode : issuerCode;
+      const text = isToken ? JSON.stringify({ access_token: 'tok' }) : (issuerBody || '{}');
+      return { getResponseCode: () => code, getContentText: () => text };
+    } };
+  };
+  answer(400, 0); assert.equal(h.plain(h.admin('wallet.check')).paso, 'clave');
+  answer(200, 403); assert.equal(h.plain(h.admin('wallet.check')).paso, 'acceso');
+  answer(200, 403, 'Google Wallet API has not been used in project'); assert.equal(h.plain(h.admin('wallet.check')).paso, 'api');
+  answer(200, 404); assert.equal(h.plain(h.admin('wallet.check')).paso, 'emisor');
+  answer(200, 200, JSON.stringify({ name: 'Gymbars' }));
+  const ok = h.plain(h.admin('wallet.check'));
+  assert.equal(ok.ok, true);
+  assert.match(ok.message, /Gymbars/);
+  assert.ok(calls.some(u => u.endsWith('/issuer/3388000000012345')));
+  assert.ok(!JSON.stringify(ok).includes('PRIVATE'), 'nunca devuelve la clave');
+});
