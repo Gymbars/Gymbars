@@ -68,7 +68,20 @@
     });
   }
 
-  gbBindMessageCards(document.getElementById('gb-ms-list'), function () { gbLoadMessages(); });
+  // Al enviar o descartar, la tarjeta sale al instante (sin esperar la recarga) y la lista se actualiza por detrás.
+  gbBindMessageCards(document.getElementById('gb-ms-list'), function (updated, act, id) {
+    var list = document.getElementById('gb-ms-list');
+    var filter = document.getElementById('gb-ms-estado').value;
+    var card = list.querySelector('[data-msg="' + id + '"]');
+    if (card && filter && updated && updated.estado !== filter) {
+      card.remove();
+      var badge = document.querySelector('.cp-nav-item[data-tab="mensajes"] .cp-gb-count');
+      var left = list.querySelectorAll('.cp-gb-msg').length;
+      if (filter === 'Pendiente' && badge && badge.textContent && !isNaN(Number(badge.textContent))) gbUpdateMessageBadge(Math.max(0, Number(badge.textContent) - 1));
+      if (!left) list.innerHTML = '<div class="cp-empty"><strong>No hay mensajes</strong></div>';
+    }
+    gbLoadMessages();
+  });
   ['gb-ms-estado', 'gb-ms-tipo', 'gb-ms-canal'].forEach(function (id) {
     document.getElementById(id).addEventListener('change', gbLoadMessages);
   });

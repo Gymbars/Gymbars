@@ -153,7 +153,7 @@ test('página: carga config.js, la lógica y jsQR; avisa si se abre dentro de ot
   }
   assert.ok(!/DPI|dpi/.test(html), 'la página nunca maneja el DPI');
   const config = readFileSync(join(ROOT, 'checkin', 'config.js'), 'utf8');
-  assert.match(config, /apiUrl: ''/, 'el repositorio no trae una URL de producción');
+  assert.match(config, /apiUrl: ('';?|'https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec')/, 'apiUrl vacío o un /exec de Apps Script');
 });
 
 

@@ -800,19 +800,28 @@
       handlers = handlers || {};
       var isRead = handlers.busy === false;            // lecturas: solo la barra, sin bloquear
 
+      // Una lectura que arranca justo después de guardar (para refrescar lo que se ve) hereda el bloqueo de la zona,
+      // así no se ve el contenido viejo mientras llega el nuevo.
+      var follow = CPL.followScope;
+      var block = !isRead || !!follow;
+      var scope = handlers.scope || follow || undefined;
+
       // Un mismo envío que ya está en curso (doble clic) se ignora.
       var key = isRead ? '' : fn + '|' + JSON.stringify(args || []);
       if (key && CPL.inflight[key]) return;
       if (key) CPL.inflight[key] = true;
 
-      var token = cpLoaderStart(!isRead, handlers.scope);
+      var token = cpLoaderStart(block, scope);
       var finish = function () { cpLoaderEnd(token); if (key) delete CPL.inflight[key]; };
 
       google.script.run
         .withSuccessHandler(function (result) {
-          finish();
-          if (handlers.ok) handlers.ok(result);
-          else cpToast((result && result.message) || 'Listo.', 'ok');
+          // Primero se ejecuta el resultado (que puede pedir lecturas nuevas) y después se libera el bloqueo.
+          CPL.followScope = isRead ? null : token.scope;
+          try {
+            if (handlers.ok) handlers.ok(result);
+            else cpToast((result && result.message) || 'Listo.', 'ok');
+          } finally { CPL.followScope = null; finish(); }
         })
         .withFailureHandler(function (err) {
           finish();
@@ -897,7 +906,7 @@
     //   - lecturas (buscar, listar): solo la barra, sin bloquear nada;
     //   - acciones que modifican datos: además bloquean la ventana o pestaña activa con un
     //     indicador giratorio, y un segundo envío idéntico se ignora (no se duplica nada).
-    var CPL = { pending: 0, timer: null, inflight: {}, legacy: [] };
+    var CPL = { pending: 0, timer: null, inflight: {}, legacy: [], followScope: null };
 
     /** Elemento que se bloquea: el indicado, la ventana abierta más reciente o la pestaña activa. */
     function cpLoaderScope(preferred) {

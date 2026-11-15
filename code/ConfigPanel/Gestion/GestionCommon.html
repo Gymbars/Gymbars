@@ -371,7 +371,7 @@
       gbCall(action, [id], function (result) {
         if (act === 'retry') cpToast(result.ok ? 'Correo enviado.' : 'No se pudo enviar el correo: ' + (result.error || ''), result.ok ? 'ok' : 'error');
         if (act === 'discard') cpToast('Mensaje descartado.', 'ok');
-        if (onChange) onChange(result.mensaje || null, act);
+        if (onChange) onChange(result.mensaje || null, act, id);
       }, { fail: function (msg) { btn.disabled = false; cpToast(msg, 'error'); } });
     });
   }
