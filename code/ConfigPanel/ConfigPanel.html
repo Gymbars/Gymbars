@@ -152,14 +152,12 @@
           <p id="cp-subtitle">Textos, contacto y colores.</p>
         </div>
         <div class="cp-actions">
-          <span class="cp-dirty" id="cp-dirty" hidden>Cambios sin guardar</span>
           <span class="cp-user-badge" id="cp-user-badge" style="display:none;">
             <i class="fa-brands fa-google"></i>
             <span id="cp-user-email"></span>
             <span class="cp-badge-verified"><i class="fa-solid fa-check"></i> Sheets OK</span>
             <button type="button" class="cp-btn-logout" onclick="cpLogout()" title="Cerrar sesión">Salir</button>
           </span>
-          <button type="button" class="cp-btn cp-btn--primary" id="cp-save">Guardar cambios</button>
         </div>
         <button type="button" class="cp-menu-toggle" id="cp-menu-toggle" aria-label="Abrir menú" aria-controls="cp-rail" aria-expanded="false" onclick="cpToggleMenu()">
           <span></span><span></span><span></span>
@@ -668,7 +666,17 @@
         cpSwitchTab(button.getAttribute('data-tab'));
       });
 
-      document.getElementById('cp-save').addEventListener('click', cpSaveCurrentTab);
+      // «Guardar cambios» va al final de cada formulario (visible igual en teléfono y en computadora).
+      Object.keys(CP_TABS).forEach(function (tab) {
+        var pane = CP_TABS[tab].save && document.getElementById('pane-' + tab);
+        if (!pane) return;
+        var bar = document.createElement('div');
+        bar.className = 'cp-savebar';
+        bar.innerHTML = '<span class="cp-dirty" hidden>Cambios sin guardar</span>' +
+          '<button type="button" class="cp-btn cp-btn--primary cp-save-btn">Guardar cambios</button>';
+        bar.querySelector('.cp-save-btn').addEventListener('click', cpSaveCurrentTab);
+        pane.appendChild(bar);
+      });
 
       document.addEventListener('input', function (event) {
         if (event.target.closest('.cp-pane') && !event.target.hasAttribute('data-no-dirty')) cpMarkDirty();
@@ -721,9 +729,6 @@
       document.getElementById('cp-title').textContent = config.title;
       document.getElementById('cp-subtitle').textContent = config.subtitle;
 
-      var save = document.getElementById('cp-save');
-      save.hidden = !config.save;
-
       document.getElementById('cp-body').scrollTop = 0;
       cpRefreshDirtyUi();
 
@@ -766,8 +771,7 @@
 
     function cpRefreshDirtyUi() {
       var dirty = !!CP.dirty[CP.tab];
-      var badge = document.getElementById('cp-dirty');
-      if (badge) badge.hidden = !dirty;
+      Array.prototype.forEach.call(document.querySelectorAll('.cp-savebar .cp-dirty'), function (note) { note.hidden = !dirty; });
 
       Array.prototype.forEach.call(document.querySelectorAll('.cp-nav-item'), function (button) {
         var tab = button.getAttribute('data-tab');
@@ -957,8 +961,7 @@
         token.scope.classList.add('is-blocked');
         token.scope.setAttribute('aria-busy', 'true');
       }
-      var save = document.getElementById('cp-save');
-      if (save) save.disabled = true;
+      Array.prototype.forEach.call(document.querySelectorAll('.cp-save-btn'), function (b) { b.disabled = true; });
       return token;
     }
 
@@ -974,8 +977,7 @@
         CPL.timer = null;
         var bar = document.getElementById('cp-progress');
         if (bar) bar.classList.remove('is-on');
-        var save = document.getElementById('cp-save');
-        if (save) save.disabled = false;
+        Array.prototype.forEach.call(document.querySelectorAll('.cp-save-btn'), function (b) { b.disabled = false; });
       }
     }
 

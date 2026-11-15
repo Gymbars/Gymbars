@@ -522,13 +522,13 @@ try {
     await m.click('#gb-m-list .cp-gb-row');
     await m.waitFor('.cp-gb-modal .cp-gb-kv');
     await m.shot(join(OUT, '32-movil-ficha.png'));
-    // «Guardar cambios»: barra fija abajo cuando hay cambios, aunque la página esté desplazada
-    await m.evaluate(`document.querySelectorAll('.cp-gb-modal').forEach(function(x){ x.remove(); }); GB.modals.length = 0; CP_TABS[CP.tab].save = true; document.getElementById('cp-save').hidden = false; cpMarkDirty(); document.getElementById('cp-body').scrollTop = 600; window.scrollTo(0, 600); true`);
-    await sleep(300);
-    const bar = JSON.parse(await m.evaluate(`(function(){ var e = document.getElementById('cp-save'), r = e.getBoundingClientRect(), c = getComputedStyle(e); return JSON.stringify({ shown: c.display !== 'none', fixed: c.position === 'fixed', inView: r.top >= 0 && r.bottom <= innerHeight, wide: r.width > 250 }); })()`));
-    assert.deepEqual(bar, { shown: true, fixed: true, inView: true, wide: true }, 'barra de guardar visible en el teléfono: ' + JSON.stringify(bar));
+    // «Guardar cambios» va al final del formulario y queda pegado abajo; la barra superior solo trae correo y salir
+    await m.evaluate(`document.querySelectorAll('.cp-gb-modal').forEach(function(x){ x.remove(); }); GB.modals.length = 0; cpSwitchTab('sitio', true); cpMarkDirty(); true`);
+    await sleep(400);
+    const bar = JSON.parse(await m.evaluate(`(function(){ var e = document.querySelector('#pane-sitio .cp-save-btn'), r = e.getBoundingClientRect(), p = getComputedStyle(e.parentNode); return JSON.stringify({ sticky: p.position === 'sticky', inView: r.top >= 0 && r.bottom <= innerHeight, wide: r.width > 250, note: !document.querySelector('#pane-sitio .cp-dirty').hidden, topbarButtons: document.querySelectorAll('.cp-topbar .cp-btn--primary, .cp-topbar #cp-save, .cp-topbar .cp-dirty').length }); })()`));
+    assert.deepEqual(bar, { sticky: true, inView: true, wide: true, note: true, topbarButtons: 0 }, 'guardar visible al final del formulario: ' + JSON.stringify(bar));
     await m.shot(join(OUT, '33-movil-guardar.png'));
-    log('Móvil: «Guardar cambios» queda fijo y visible abajo');
+    log('Móvil: «Guardar cambios» al final del formulario, visible; sin botón arriba');
     const overflow = await m.evaluate('document.documentElement.scrollWidth > document.documentElement.clientWidth');
     assert.equal(overflow, false, 'sin desplazamiento horizontal de la página');
     log('Sin desbordamiento horizontal');

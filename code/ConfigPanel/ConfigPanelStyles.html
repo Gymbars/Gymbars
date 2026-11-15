@@ -1713,26 +1713,8 @@
       flex-wrap: nowrap;
     }
 
-    .cp-dirty,
     .cp-user-badge {
       display: none !important;
-    }
-
-    /* Guardar aparece solo si hay cambios sin guardar */
-    #cp-save {
-      height: 40px;
-      padding: 0 14px;
-      font-size: 14px;
-      font-weight: 700;
-      border-radius: 10px;
-    }
-
-    #cp-save:not([hidden]) {
-      display: none;
-    }
-
-    .cp-dirty:not([hidden]) ~ #cp-save:not([hidden]) {
-      display: inline-flex;
     }
 
     /* ---- Botón de menú (mismo gesto que el sitio) ---- */
@@ -2520,14 +2502,20 @@
   }
   .cp-gb-row.is-loading { opacity: 0.6; pointer-events: none; }
 
+  /* «Guardar cambios»: al final de cada formulario y pegado al borde inferior mientras se recorre. */
+  .cp-savebar {
+    position: sticky; bottom: 0; z-index: 20;
+    display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 10px 14px;
+    margin-top: 24px; padding: 14px 0 calc(14px + env(safe-area-inset-bottom, 0px));
+    background: linear-gradient(to top, var(--cp-bg) 72%, rgba(241, 242, 244, 0));
+  }
+  .cp-savebar .cp-btn { min-height: 44px; padding: 0 22px; font-weight: 700; }
   @media (max-width: 900px) {
-    /* «Guardar cambios» siempre a la vista en el teléfono: barra fija abajo mientras haya cambios sin guardar. */
-    .cp-dirty:not([hidden]) ~ #cp-save:not([hidden]) {
-      position: fixed; left: 16px; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px));
-      width: auto; height: 50px; z-index: 90; justify-content: center; font-size: 15px;
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
-    }
-    .cp-app:has(.cp-dirty:not([hidden])) .cp-body { padding-bottom: 92px; }
+    .cp-savebar .cp-btn { flex: 1 1 100%; }
+    .cp-savebar .cp-dirty { flex: 1 1 100%; text-align: center; }
+  }
+
+  @media (max-width: 900px) {
     .cp-gb-modal-foot { padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)); }
   }
 </style>
