@@ -4,10 +4,29 @@ Migración de **gymbarsgt.com** (Firebase Hosting + Cloud Firestore) a **Google 
 usando una **hoja de cálculo como base de datos** para gestionar el contenido del sitio
 y su panel de administración.
 
+> **Gestión del gimnasio** (miembros, pagos, medidas, evaluaciones, asistencia con QR, mensajes y
+> automatización): ver [`GESTION.md`](GESTION.md). El escáner del tablet está en [`../checkin`](../checkin/README.md).
+
 ```
 code/
-├── Code.gs                    # doGet, include(), logger, menú, setupSheets()
+├── Code.gs                    # doGet/doPost, include(), logger, menú, setupSheets_()
 ├── WebsiteService.gs          # Lee la hoja y arma el modelo JSON del sitio
+│
+│   # --- Sistema de gestión del gimnasio (ver GESTION.md) ---
+├── Auth.gs                    # Roles (Admin/Coach), sesión y verificación SIEMPRE en el servidor
+├── Api.gs                     # gbApi: única puerta del panel (valida sesión y rol en cada llamada)
+├── Modules.gs                 # Registro de acciones de gestión y sus roles
+├── Schema.gs                  # Pestañas de datos, encabezados, listas, datos iniciales
+├── Repo.gs                    # Leer/escribir por nombre de columna, con bloqueo y crecimiento de hoja
+├── Rules.gs                   # Reglas puras: próximo pago, estado de pago, puntaje, WhatsApp
+├── Members.gs  Payments.gs  Measurements.gs  Evaluations.gs
+├── Messaging.gs               # Bandeja de mensajes, plantillas, enlaces, correo
+├── Pages.gs                   # Páginas públicas: boleta, reportes, carnet con QR
+├── Attendance.gs              # Asistencia (QR/manual), dispositivos y endpoint del tablet
+├── Triggers.gs                # Automatización diaria y configuración
+├── Progress.gs                # Panorama: a quién atender, visitas por semana
+├── Wallet.gs                  # Carnet y pase de Google Wallet
+├── Migration.gs               # Importar los CSV generados desde el Excel
 ├── Index.html                 # Shell: fuentes, tema, parciales
 ├── Styles.html                # Variables CSS y estilos base
 ├── Navbar/
@@ -36,7 +55,9 @@ code/
 │   ├── TabProgramas/          # Rutinas + instrucciones/ejercicios
 │   ├── TabHorario/            # Días, turnos y colores
 │   ├── TabRedes/              # Redes sociales e iconos
-│   └── TabSistema/            # Respaldo, caché, diagnóstico y bitácora
+│   ├── TabSistema/            # Respaldo, caché, diagnóstico y bitácora
+│   ├── Gestion/               # Utilidades compartidas de las pestañas de gestión
+│   ├── TabProgreso/  TabMiembros/  TabAsistencia/  TabMensajes/  TabAjustes/
 ├── appsscript.json
 ├── .clasp.json.example
 └── README.md
@@ -159,7 +180,7 @@ Si no existe, se usa la carpeta indicada en la sección **Imágenes**.
    `Ajuste` define `cover` (recorta para llenar) o `contain` (muestra completa,
    ideal para logos y banners).
 
-`convertImageUrl()` en `WebsiteService.gs` transforma los enlaces de Drive a
+`convertImageUrl_()` en `WebsiteService.gs` transforma los enlaces de Drive a
 `https://lh3.googleusercontent.com/d/<ID>` (el formato que sí carga en un `<img>`).
 
 Las imágenes se renderizan con `<img loading="lazy">` y un reintento automático:
@@ -196,7 +217,8 @@ pestañas faltantes (la hoja ya viene poblada) y luego implementar el Web App.
 > **Importante al actualizar:** `appsscript.json` incluye permisos adicionales:
 > `drive` (listar la carpeta y subir imágenes), `script.external_request`
 > (comprobar enlaces de imágenes), `script.container.ui` (abrir el panel como
-> diálogo) y `script.scriptapp` (obtener la URL del sitio). Al subir esta versión
+> diálogo), `script.scriptapp` (URL del sitio y disparador diario) y
+> `script.send_mail` (correos automáticos del sistema de gestión). Al subir esta versión
 > hay que **volver a autorizar** el script y publicar una **nueva versión** de la
 > implementación; si no, el panel fallará al abrirse o al usar Drive. La
 > implementación anterior sigue activa hasta que se crea la nueva versión.
