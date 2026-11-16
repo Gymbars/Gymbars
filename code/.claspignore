@@ -1,0 +1,6 @@
+# Solo se suben al proyecto de Apps Script los .gs, los .html y el manifiesto.
+# (Los .md, las configuraciones .clasp.*.json y los archivos del sistema se quedan fuera.)
+**/**
+!appsscript.json
+!**/*.gs
+!**/*.html

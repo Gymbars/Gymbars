@@ -125,7 +125,7 @@ function readImages_() {
     var ref = String(values[i][0] || '').trim();
     if (!ref) continue;
     images[ref] = {
-      url: convertImageUrl(values[i][1]),
+      url: convertImageUrl_(values[i][1]),
       pos: normalizePosValue_(values[i][2]),
       source: String(values[i][3] || '').trim(),
       fit: normalizeFitValue_(values[i][4])
@@ -349,7 +349,7 @@ function resolveImage_(images, ref) {
   if (!ref) return { url: '', pos: 'center', fit: 'cover' };
   if (images[ref]) return { url: images[ref].url, pos: images[ref].pos, fit: images[ref].fit };
   // Si en la celda escribieron una URL directa en lugar de una referencia.
-  return { url: convertImageUrl(ref), pos: 'center', fit: 'cover' };
+  return { url: convertImageUrl_(ref), pos: 'center', fit: 'cover' };
 }
 
 /**
@@ -368,7 +368,7 @@ function normalizeFitValue_(raw) {
  * @param {string} url
  * @return {string}
  */
-function convertImageUrl(url) {
+function convertImageUrl_(url) {
   if (!url) return '';
   url = String(url).trim();
 

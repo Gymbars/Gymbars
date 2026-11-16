@@ -1,0 +1,119 @@
+<div id="gb-a-stats" class="cp-gb-stats"></div>
+
+<div class="cp-gb-cols">
+  <div>
+    <div class="cp-gb-section-head">
+      <h3 id="gb-a-title">Hoy</h3>
+      <button type="button" class="cp-btn cp-btn--small" id="gb-a-refresh">Actualizar</button>
+    </div>
+    <div id="gb-a-list"></div>
+  </div>
+
+  <div class="cp-panel">
+    <div class="cp-gb-section-head"><h3>Registrar a mano</h3></div>
+    <p class="cp-hint" style="margin-bottom:10px">Si alguien olvidó su QR o el tablet no está, búscalo y registra su visita.</p>
+    <div class="cp-gb-searchbox">
+      <svg class="cp-gb-search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg>
+      <input type="search" id="gb-a-q" placeholder="Nombre, ID o teléfono" autocomplete="off" aria-label="Buscar miembro" data-no-dirty>
+      <button type="button" class="cp-gb-search-clear" id="gb-a-q-clear" aria-label="Borrar búsqueda" hidden>&times;</button>
+    </div>
+    <div id="gb-a-results" style="margin-top:10px"></div>
+  </div>
+</div>
+
+<script>
+  // ============================================================
+  // ===  Asistencia: visitas de hoy y registro manual  =========
+  // ============================================================
+
+  var GBA = { timer: null, seq: 0 };
+
+  function gbShowAttendance() {
+    gbRefreshMessageBadge();
+    gbLoadAttendance();
+    // Se actualiza sola cada 30 s mientras esta pestaña esté abierta (el tablet registra visitas todo el día).
+    if (GBA.timer) clearInterval(GBA.timer);
+    GBA.timer = setInterval(function () {
+      if (CP.tab !== 'asistencia') { clearInterval(GBA.timer); GBA.timer = null; return; }
+      gbLoadAttendance(true);
+    }, 30000);
+  }
+
+  var GB_ESTADO_AL_MOMENTO = { al_dia: 'Al día', por_vencer: 'Por vencer', gracia: 'En gracia', vencido: 'Vencido', sin_pagos: 'Sin pagos' };
+
+  function gbLoadAttendance(silent) {
+    var list = document.getElementById('gb-a-list');
+    if (!silent && !list.getAttribute('data-loaded')) list.innerHTML = gbSkeleton(5);
+    gbCall('attendance.today', [], function (r) {
+      list.setAttribute('data-loaded', '1');
+      document.getElementById('gb-a-stats').innerHTML =
+        '<div class="cp-gb-stat is-ok"><b>' + r.personas + '</b><span>Personas hoy</span></div>' +
+        '<div class="cp-gb-stat"><b>' + r.total + '</b><span>Visitas registradas</span></div>';
+      document.getElementById('gb-a-title').textContent = 'Hoy · ' + gbDate(r.fecha);
+
+      if (!r.items.length) {
+        list.innerHTML = '<div class="cp-empty"><strong>Todavía no hay visitas hoy</strong><p>Aparecerán aquí cuando escaneen su QR en el tablet.</p></div>';
+        return;
+      }
+      list.innerHTML = '<div class="cp-gb-list">' + r.items.map(function (a) {
+        var warn = a.estado === 'vencido' || a.estado === 'sin_pagos' || a.estado === 'gracia';
+        return '<button type="button" class="cp-gb-row" style="grid-template-columns:70px minmax(0,2fr) auto auto" data-open="' + cpEsc(a.memberId) + '" data-name="' + cpEsc(a.nombre || '') + '">' +
+          '<div class="cp-gb-name" style="font-variant-numeric:tabular-nums">' + cpEsc(a.hora) + '</div>' +
+          '<div><div class="cp-gb-name">' + cpEsc(a.nombre || a.memberId) + '</div><div class="cp-gb-sub">' + cpEsc(a.memberId) + '</div></div>' +
+          '<div><span class="cp-gb-chip ' + (a.origen === 'QR' ? 'is-info' : '') + '">' + (a.origen === 'QR' ? 'QR' : 'A mano') + '</span></div>' +
+          '<div>' + (warn ? '<span class="cp-gb-chip ' + (a.estado === 'gracia' ? 'is-warn' : 'is-bad') + '">' + cpEsc(GB_ESTADO_AL_MOMENTO[a.estado] || a.estado) + '</span>' : '') + '</div>' +
+        '</button>';
+      }).join('') + '</div>';
+    }, { fail: function (msg) { if (!silent) cpToast(msg, 'error'); } });
+  }
+
+  document.getElementById('gb-a-refresh').addEventListener('click', function () { gbLoadAttendance(); });
+  document.getElementById('gb-a-list').addEventListener('click', function (e) {
+    var row = e.target.closest('[data-open]');
+    if (row) gbOpenMember(row.getAttribute('data-open'), row.getAttribute('data-name'));
+  });
+
+  // ---------- Registro manual ----------
+
+  // Búsqueda instantánea con la lista de miembros en memoria (la misma que usa la pestaña Miembros).
+  function gbAttendanceSearch(text) {
+    var q = text.trim();
+    var box = document.getElementById('gb-a-results');
+    if (q.length < 2) { box.innerHTML = ''; return; }
+    gbGetMembers(function (cache) {
+      if (document.getElementById('gb-a-q').value.trim() !== q) return;      // ya escribió otra cosa
+      var found = gbFilterMembers(cache.items, q, { estado: 'Activo' });
+      if (!found.length) { box.innerHTML = '<p class="cp-hint">No hay miembros activos con esa búsqueda.</p>'; return; }
+      box.innerHTML = '<div class="cp-gb-list">' + found.slice(0, 6).map(function (m) {
+        return '<div class="cp-gb-row cp-gb-row--static" style="grid-template-columns:minmax(0,1fr) auto">' +
+          '<div><div class="cp-gb-name">' + cpEsc(m.nombre) + '</div><div class="cp-gb-sub">' + gbPagoChip(m.pago) + '</div></div>' +
+          '<button type="button" class="cp-btn cp-btn--primary cp-btn--small" data-visit="' + cpEsc(m.memberId) + '" data-name="' + cpEsc(m.nombre) + '">Registrar</button></div>';
+      }).join('') + '</div>' + (found.length > 6 ? '<p class="cp-hint" style="margin-top:6px">Hay ' + found.length + ' coincidencias: escribe más para afinar.</p>' : '');
+    });
+  }
+  gbBindSearchBox('gb-a-q', gbAttendanceSearch, function () {
+    var btn = document.querySelector('#gb-a-results [data-visit]');       // Enter lleva al primer «Registrar»
+    if (btn) btn.focus();
+  });
+
+  document.getElementById('gb-a-results').addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-visit]');
+    if (!btn) return;
+    gbRegisterVisitFor(btn.getAttribute('data-visit'), btn.getAttribute('data-name'), false);
+  });
+
+  function gbRegisterVisitFor(memberId, name, force) {
+    gbCall('attendance.manual', [memberId, !!force], function (r) {
+      if (r.status === 'duplicado') {
+        gbConfirm(name + ' ya tiene una visita hoy a las ' + r.hora + '. ¿Registrar otra?', { title: 'Visita repetida', okLabel: 'Registrar otra' },
+          function () { gbRegisterVisitFor(memberId, name, true); });
+        return;
+      }
+      cpToast('Visita de ' + name + ' registrada.', 'ok');
+      var q = document.getElementById('gb-a-q'); q.value = '';
+      document.getElementById('gb-a-q-clear').hidden = true;
+      document.getElementById('gb-a-results').innerHTML = '';
+      gbLoadAttendance(true);
+    });
+  }
+</script>

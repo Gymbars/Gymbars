@@ -1,0 +1,91 @@
+<div id="gb-progress"></div>
+
+<script>
+  // ============================================================
+  // ===  Progreso: panorama del día  ===========================
+  // ============================================================
+
+  function gbShowProgress() {
+    var root = document.getElementById('gb-progress');
+    if (!root.getAttribute('data-loaded')) root.innerHTML = gbSkeleton(6);
+    gbCall('progress.overview', [], function (overview) {
+      root.setAttribute('data-loaded', '1');
+      gbRenderProgress(overview);
+    });
+    gbRefreshMessageBadge();
+  }
+
+  var GB_MOTIVO_CHIP = {
+    pago_vencido: 'is-bad', sin_pagos: 'is-bad', inactividad: 'is-warn', por_vencer: 'is-warn', medidas: 'is-info'
+  };
+
+  function gbRenderProgress(o) {
+    var root = document.getElementById('gb-progress');
+    var m = o.miembros || { pago: {} };
+    var pago = m.pago || {};
+
+    var stats =
+      '<div class="cp-gb-stats">' +
+        '<div class="cp-gb-stat"><b>' + m.activos + '</b><span>Miembros activos</span></div>' +
+        '<div class="cp-gb-stat is-ok"><b>' + o.hoy.personas + '</b><span>Vinieron hoy</span></div>' +
+        '<div class="cp-gb-stat ' + (pago.vencido ? 'is-bad' : '') + '"><b>' + (pago.vencido || 0) + '</b><span>Mensualidad vencida</span></div>' +
+        '<div class="cp-gb-stat ' + (pago.por_vencer ? 'is-warn' : '') + '"><b>' + ((pago.por_vencer || 0) + (pago.gracia || 0)) + '</b><span>Por vencer o en gracia</span></div>' +
+        '<div class="cp-gb-stat"><b>' + (pago.sin_pagos || 0) + '</b><span>Sin pagos registrados</span></div>' +
+      '</div>';
+
+    var banner = '';
+    if (!o.controlAsistencia) {
+      banner = '<div class="cp-gb-note">El control de asistencia todavía no está en uso. Cuando conectes el tablet con el lector de QR ' +
+        '(Ajustes → Tablets de asistencia), aquí verás quién no viene hace días.</div>';
+    }
+
+    var attention;
+    if (!o.atencion.length) {
+      attention = '<div class="cp-empty"><strong>Todo en orden</strong><p>Nadie necesita atención en este momento.</p></div>';
+    } else {
+      attention = '<div class="cp-gb-list">' + o.atencion.map(function (a) {
+        return '<button type="button" class="cp-gb-row" data-open="' + cpEsc(a.memberId) + '" data-name="' + cpEsc(a.nombre) + '">' +
+          '<div><div class="cp-gb-name">' + cpEsc(a.nombre) + '</div><div class="cp-gb-sub">' + cpEsc(a.memberId) + '</div></div>' +
+          '<div>' + (a.motivos.some(function (r) { return ['pago_vencido', 'sin_pagos', 'por_vencer'].indexOf(r.code) !== -1; }) ? '' : gbPagoChip(a.pago)) + '</div>' +
+          '<div style="display:flex;gap:6px;flex-wrap:wrap">' + a.motivos.map(function (r) {
+            return '<span class="cp-gb-chip ' + (GB_MOTIVO_CHIP[r.code] || '') + '">' + cpEsc(r.texto) + '</span>';
+          }).join('') + '</div>' +
+          '<div class="cp-gb-cell-end"><span class="cp-btn cp-btn--small">Abrir</span></div>' +
+        '</button>';
+      }).join('') + '</div>' +
+      (o.totalAtencion > o.atencion.length ? '<p class="cp-hint" style="margin-top:8px">Mostrando ' + o.atencion.length + ' de ' + o.totalAtencion + '.</p>' : '');
+    }
+
+    var maxVisits = Math.max.apply(null, o.semanas.map(function (w) { return w.visitas; }).concat([1]));
+    var weeks = '<div class="cp-gb-weeks">' + o.semanas.map(function (w) {
+      var h = Math.round((w.visitas / maxVisits) * 100);
+      var d = gbDate(w.desde);
+      return '<div class="cp-gb-week" title="Semana del ' + cpEsc(d) + ': ' + w.visitas + ' visitas, ' + w.personas + ' personas">' +
+        '<b>' + w.visitas + '</b><i style="height:' + Math.max(h, 2) + '%"></i><span>' + cpEsc(d.slice(0, 5)) + '</span></div>';
+    }).join('') + '</div>';
+
+    var portfolio =
+      '<ul style="list-style:none;margin:0;padding:0;display:grid;gap:8px;font-size:12.5px">' +
+        [['al_dia', 'Al día', 'is-ok'], ['por_vencer', 'Por vencer', 'is-warn'], ['gracia', 'En gracia', 'is-warn'],
+         ['vencido', 'Vencidos', 'is-bad'], ['sin_pagos', 'Sin pagos', 'is-bad']].map(function (r) {
+          return '<li style="display:flex;justify-content:space-between"><span class="cp-gb-chip ' + r[2] + '">' + r[1] + '</span><b>' + (pago[r[0]] || 0) + '</b></li>';
+        }).join('') +
+      '</ul>' +
+      '<p class="cp-hint" style="margin-top:12px">Activos ' + m.activos + ' · Inactivos ' + m.inactivos + ' · Suspendidos ' + m.suspendidos + '</p>';
+
+    root.innerHTML = stats + banner +
+      '<div class="cp-gb-cols">' +
+        '<div><div class="cp-gb-section-head"><h3>Necesitan atención (' + o.totalAtencion + ')</h3></div>' + attention + '</div>' +
+        '<div>' +
+          '<div class="cp-panel"><div class="cp-gb-section-head"><h3>Visitas por semana</h3></div>' + weeks +
+            (o.controlAsistencia ? '' : '<p class="cp-hint">Sin datos todavía.</p>') + '</div>' +
+          '<div class="cp-panel"><div class="cp-gb-section-head"><h3>Estado de las mensualidades</h3></div>' + portfolio + '</div>' +
+        '</div>' +
+      '</div>';
+  }
+
+  document.addEventListener('click', function (e) {
+    var row = e.target.closest('#gb-progress [data-open]');
+    if (row && typeof gbOpenMember === 'function') gbOpenMember(row.getAttribute('data-open'), row.getAttribute('data-name'));
+  });
+</script>

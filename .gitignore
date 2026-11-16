@@ -37,3 +37,14 @@ testem.log
 # System Files
 .DS_Store
 Thumbs.db
+
+# Datos personales de la migración (DPI, teléfonos, fechas de nacimiento): NUNCA al repositorio
+/migration/
+*.xlsm
+*.xlsx
+
+# Capturas generadas por tools/ui-check.mjs
+/ui-shots/
+
+# Registro local de despliegues
+.deploy-log.jsonl

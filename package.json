@@ -1,0 +1,17 @@
+{
+  "name": "gymbars",
+  "private": true,
+  "description": "Gymbars: sitio web y sistema de gestión sobre Google Sheets + Apps Script",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "test": "node --test \"tools/tests/*.test.mjs\"",
+    "check": "node tools/check-syntax.mjs",
+    "guard": "node tools/guard.mjs",
+    "verify": "npm run guard && npm run check && npm test",
+    "preview": "node tools/preview.mjs",
+    "preview:admin": "node tools/preview-admin.mjs --demo",
+    "ui-check": "node tools/ui-check.mjs",
+    "deploy:staging": "node tools/deploy.mjs staging",
+    "deploy:prod": "node tools/deploy.mjs prod"
+  }
+}

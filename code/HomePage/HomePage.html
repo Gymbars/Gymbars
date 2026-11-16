@@ -1,59 +1,64 @@
 <!-- ==================== HOME ==================== -->
 
-<!-- Carrusel -->
-<div class="hero-carousel" id="heroCarousel" aria-roledescription="carrusel" aria-label="Fotos del gimnasio">
-  <div class="hero-carousel-track" id="carouselTrack"></div>
-  <button class="carousel-arrow carousel-arrow--prev" id="carouselPrev" type="button" aria-label="Anterior">
-    <i class="fas fa-chevron-left"></i>
-  </button>
-  <button class="carousel-arrow carousel-arrow--next" id="carouselNext" type="button" aria-label="Siguiente">
-    <i class="fas fa-chevron-right"></i>
-  </button>
-  <div class="carousel-dots" id="carouselDots" role="tablist" aria-label="Seleccionar imagen"></div>
-</div>
+<!-- Portada: fotos a sangre + marca y acción principal -->
+<header class="hero" id="top">
+  <div class="hero-carousel" id="heroCarousel" aria-roledescription="carrusel" aria-label="Fotos del gimnasio">
+    <div class="hero-carousel-track" id="carouselTrack"></div>
+    <button class="carousel-arrow carousel-arrow--prev" id="carouselPrev" type="button" aria-label="Anterior">
+      <i class="fas fa-chevron-left"></i>
+    </button>
+    <button class="carousel-arrow carousel-arrow--next" id="carouselNext" type="button" aria-label="Siguiente">
+      <i class="fas fa-chevron-right"></i>
+    </button>
+    <div class="carousel-dots" id="carouselDots" role="tablist" aria-label="Seleccionar imagen"></div>
+  </div>
 
-<!-- Información -->
+  <div class="hero-copy container">
+    <h1 class="hero-title" id="siteName">Gymbars</h1>
+    <p class="hero-lead" id="siteTagline"></p>
+    <div class="hero-actions">
+      <a class="btn btn--primary" href="#contacto" data-scroll="contacto">Quiero entrar</a>
+      <a class="btn btn--light" href="#programas" data-scroll="programas">Ver rutinas</a>
+    </div>
+  </div>
+</header>
+
+<!-- Qué ofrecemos -->
 <section class="section section--alt" id="info">
-  <div class="container text-center">
-    <h1 class="section-title" id="siteName">Gymbars</h1>
-    <hr class="section-divider">
-    <p class="section-lead" id="siteTagline"></p>
-
+  <div class="container">
     <div class="features-grid" id="featuresGrid"></div>
   </div>
 </section>
 
+<!-- Programas: barras de rutina -->
+<section class="section" id="programas">
+  <div class="container">
+    <h2 class="section-title" id="programsTitle">Rutinas de Calistenia</h2>
+    <div class="programs-grid" id="programsGrid"></div>
+  </div>
+</section>
+
 <!-- Horario y contacto -->
-<section class="section" id="horario">
+<section class="section section--alt" id="horario">
   <div class="container">
     <div class="two-columns">
       <div class="column">
-        <h2 class="subsection-title text-center" id="scheduleTitle">Horario</h2>
+        <h2 class="subsection-title" id="scheduleTitle">Horario</h2>
         <div class="schedule" id="scheduleTable"></div>
       </div>
 
-      <div class="column">
-        <h2 class="subsection-title text-center" id="contactTitle">Contacto</h2>
+      <div class="column" id="contacto">
+        <h2 class="subsection-title" id="contactTitle">Contacto</h2>
         <div class="contact-card" id="contactCard"></div>
       </div>
     </div>
   </div>
 </section>
 
-<!-- Programas -->
-<section class="section section--alt" id="programas">
-  <div class="container text-center">
-    <h1 class="section-title" id="programsTitle">Rutinas de Calistenia</h1>
-    <hr class="section-divider">
-    <div class="programs-grid" id="programsGrid"></div>
-  </div>
-</section>
-
 <!-- Ubicación -->
 <section class="section" id="ubicacion">
-  <div class="container text-center">
-    <h1 class="section-title" id="locationTitle">Ubicación</h1>
-    <hr class="section-divider">
+  <div class="container">
+    <h2 class="section-title" id="locationTitle">Ubicación</h2>
     <div class="address" id="addressBlock"></div>
     <div class="map-wrapper" id="mapWrapper"></div>
   </div>
@@ -79,12 +84,24 @@
     const dots = document.getElementById('carouselDots');
     const wrap = document.getElementById('heroCarousel');
 
-    if (!carouselItems.length) {
+    // El hero lleva la marca en texto: las imágenes "contener" (logos o banners)
+    // chocan con ella, así que se usan solo las fotos a sangre si existe alguna.
+    const heroItems = carouselItems.some(item => item.fit !== 'contain')
+      ? carouselItems.filter(item => item.fit !== 'contain')
+      : carouselItems;
+
+    if (!heroItems.length) {
       wrap.style.display = 'none';
       return;
     }
 
-    track.innerHTML = carouselItems.map((item, i) => {
+    if (heroItems.length < 2) {
+      document.getElementById('carouselPrev').style.display = 'none';
+      document.getElementById('carouselNext').style.display = 'none';
+      dots.style.display = 'none';
+    }
+
+    track.innerHTML = heroItems.map((item, i) => {
       const label = item.title || item.description || ('Imagen ' + (i + 1));
 
       return '<figure class="carousel-slide' + (i === 0 ? ' is-active' : '') + '" role="group" ' +
@@ -95,13 +112,13 @@
              '</figure>';
     }).join('');
 
-    dots.innerHTML = carouselItems.map((item, i) =>
+    dots.innerHTML = heroItems.map((item, i) =>
       '<button class="carousel-dot' + (i === 0 ? ' is-active' : '') + '" type="button" role="tab" ' +
         'aria-label="' + escapeHtml_('Ir a la imagen ' + (i + 1)) + '" aria-selected="' + (i === 0) + '" ' +
         'data-index="' + i + '"></button>'
     ).join('');
 
-    carouselState.count = carouselItems.length;
+    carouselState.count = heroItems.length;
     carouselState.index = 0;
 
     document.getElementById('carouselPrev').addEventListener('click', () => moveCarousel(-1, true));
@@ -131,7 +148,7 @@
       if (e.key === 'ArrowRight') moveCarousel(1, true);
     });
 
-    if (carouselItems.length > 1) startCarousel();
+    if (heroItems.length > 1) startCarousel();
   }
 
   function moveCarousel(direction, manual) {
@@ -225,7 +242,7 @@
 
       return '<div class="schedule-group">' +
         '<div class="schedule-day" style="background-color:' + escapeHtml_(group.color) + '">' + escapeHtml_(group.day) + '</div>' +
-        rows +
+        '<div class="schedule-rows">' + rows + '</div>' +
       '</div>';
     }).join('');
   }

@@ -1,0 +1,144 @@
+<div class="cp-toolbar">
+  <select id="gb-ms-estado" class="cp-gb-select" data-no-dirty aria-label="Estado del mensaje">
+    <option value="Pendiente">Pendientes</option>
+    <option value="Enviado">Enviados</option>
+    <option value="Error">Con error</option>
+    <option value="Descartado">Descartados</option>
+    <option value="">Todos</option>
+  </select>
+  <select id="gb-ms-tipo" class="cp-gb-select" data-no-dirty aria-label="Tipo de mensaje">
+    <option value="">Todos los tipos</option>
+  </select>
+  <select id="gb-ms-canal" class="cp-gb-select" data-no-dirty aria-label="Canal">
+    <option value="">WhatsApp y correo</option>
+    <option value="WhatsApp">WhatsApp</option>
+    <option value="Email">Correo</option>
+  </select>
+  <span class="cp-spacer"></span>
+  <button type="button" class="cp-btn" id="gb-ms-refresh">Actualizar</button>
+  <button type="button" class="cp-btn" id="gb-ms-templates" data-role="admin">Plantillas</button>
+</div>
+<div id="gb-ms-summary" class="cp-gb-summary"></div>
+<div id="gb-ms-list"></div>
+
+<script>
+  // ============================================================
+  // ===  Mensajes: bandeja de envío  ===========================
+  // ============================================================
+  // WhatsApp no tiene costo: cada mensaje queda listo con su texto y enlace; la persona
+  // del gimnasio toca «Abrir WhatsApp», envía y marca «Ya lo envié». Los correos salen solos.
+
+  var GBMS = { seq: 0 };
+
+  (function fillTypes() {
+    var sel = document.getElementById('gb-ms-tipo');
+    Object.keys(GB_TIPOS).forEach(function (k) {
+      var o = document.createElement('option'); o.value = k; o.textContent = GB_TIPOS[k]; sel.appendChild(o);
+    });
+  })();
+
+  function gbShowMessages() { gbLoadMessages(); }
+
+  function gbLoadMessages() {
+    var seq = ++GBMS.seq;
+    var list = document.getElementById('gb-ms-list');
+    var filters = {
+      estado: document.getElementById('gb-ms-estado').value,
+      tipo: document.getElementById('gb-ms-tipo').value,
+      canal: document.getElementById('gb-ms-canal').value,
+      limit: 200
+    };
+    gbCall('messages.list', [filters], function (r) {
+      if (seq !== GBMS.seq) return;
+      gbUpdateMessageBadge(r.counts.Pendiente);
+      var c = r.counts;
+      document.getElementById('gb-ms-summary').innerHTML =
+        '<span><b>' + c.Pendiente + '</b> pendientes</span><span><b>' + c.Enviado + '</b> enviados</span>' +
+        (c.Error ? '<span class="cp-gb-chip is-bad">' + c.Error + ' con error</span>' : '') +
+        (r.total > r.items.length ? '<span>Mostrando ' + r.items.length + ' de ' + r.total + '</span>' : '');
+
+      if (!r.items.length) {
+        list.innerHTML = '<div class="cp-empty"><strong>' + (filters.estado === 'Pendiente' ? 'No hay mensajes pendientes' : 'No hay mensajes') + '</strong>' +
+          '<p>' + (filters.estado === 'Pendiente'
+            ? 'Cuando registres un pago o prepares un reporte, el mensaje aparecerá aquí listo para enviar.'
+            : 'Cambia los filtros para ver otros mensajes.') + '</p></div>';
+        return;
+      }
+      list.innerHTML = r.items.map(function (m) { return gbMessageCard(m); }).join('');
+    });
+  }
+
+  // Al enviar o descartar, la tarjeta sale al instante (sin esperar la recarga) y la lista se actualiza por detrás.
+  gbBindMessageCards(document.getElementById('gb-ms-list'), function (updated, act, id) {
+    var list = document.getElementById('gb-ms-list');
+    var filter = document.getElementById('gb-ms-estado').value;
+    var card = list.querySelector('[data-msg="' + id + '"]');
+    if (card && filter && updated && updated.estado !== filter) {
+      card.remove();
+      var badge = document.querySelector('.cp-nav-item[data-tab="mensajes"] .cp-gb-count');
+      var left = list.querySelectorAll('.cp-gb-msg').length;
+      if (filter === 'Pendiente' && badge && badge.textContent && !isNaN(Number(badge.textContent))) gbUpdateMessageBadge(Math.max(0, Number(badge.textContent) - 1));
+      if (!left) list.innerHTML = '<div class="cp-empty"><strong>No hay mensajes</strong></div>';
+    }
+    gbLoadMessages();
+  });
+  ['gb-ms-estado', 'gb-ms-tipo', 'gb-ms-canal'].forEach(function (id) {
+    document.getElementById(id).addEventListener('change', gbLoadMessages);
+  });
+  document.getElementById('gb-ms-refresh').addEventListener('click', gbLoadMessages);
+  document.getElementById('gb-ms-templates').addEventListener('click', function () { gbTemplatesEditor(); });
+
+  // ---------- Contador en el menú ----------
+
+  function gbUpdateMessageBadge(count) {
+    var btn = document.querySelector('.cp-nav-item[data-tab="mensajes"]');
+    if (!btn) return;
+    var badge = btn.querySelector('.cp-gb-count');
+    if (!badge) { badge = document.createElement('em'); badge.className = 'cp-gb-count'; btn.appendChild(badge); }
+    badge.textContent = count > 99 ? '99+' : String(count || '');
+    badge.hidden = !count;
+  }
+
+  function gbRefreshMessageBadge() {
+    gbCall('messages.list', [{ estado: 'Pendiente', limit: 1 }], function (r) { gbUpdateMessageBadge(r.counts.Pendiente); },
+      { fail: function () { /* el contador no es crítico */ } });
+  }
+
+  // ---------- Plantillas (solo Admin) ----------
+
+  function gbTemplatesEditor() {
+    gbCall('templates.list', [], function (r) {
+      var items = r.items;
+      var options = items.map(function (t, i) {
+        return '<option value="' + i + '">' + cpEsc((GB_TIPOS[t.tipo] || t.tipo) + ' · ' + (t.canal === 'Email' ? 'Correo' : 'WhatsApp')) + '</option>';
+      }).join('');
+      var modal = gbModal({
+        title: 'Plantillas de mensajes', size: 'lg', autofocus: false,
+        body: '<div class="cp-gb-form">' +
+          '<div class="cp-gb-field is-wide"><label for="gb-tpl-sel">Mensaje</label><select id="gb-tpl-sel">' + options + '</select></div>' +
+          '<div class="cp-gb-field is-wide" id="gb-tpl-subject-wrap"><label for="gb-tpl-subject">Asunto (solo correo)</label><input id="gb-tpl-subject" type="text"></div>' +
+          '<div class="cp-gb-field is-wide"><label for="gb-tpl-text">Texto</label><textarea id="gb-tpl-text" rows="12"></textarea>' +
+            '<span class="cp-field-help">Variables que se reemplazan solas: ' + r.variables.map(function (v) { return '<code>' + cpEsc(v) + '</code>'; }).join(' ') + '</span></div>' +
+        '</div>',
+        foot: [
+          { label: 'Cerrar', onClick: function (h) { h.close(); } },
+          { label: 'Guardar plantilla', kind: 'primary', onClick: function (h) {
+            var t = items[Number(sel.value)];
+            gbCall('templates.save', [{ tipo: t.tipo, canal: t.canal, asunto: subject.value, texto: text.value }], function () {
+              t.asunto = subject.value; t.texto = text.value;
+              cpToast('Plantilla guardada.', 'ok');
+            });
+          } }
+        ]
+      });
+      var sel = modal.body.querySelector('#gb-tpl-sel'), subject = modal.body.querySelector('#gb-tpl-subject'), text = modal.body.querySelector('#gb-tpl-text');
+      function load() {
+        var t = items[Number(sel.value)];
+        subject.value = t.asunto; text.value = t.texto;
+        modal.body.querySelector('#gb-tpl-subject-wrap').hidden = t.canal !== 'Email';
+      }
+      sel.addEventListener('change', load);
+      load();
+    });
+  }
+</script>

@@ -1,0 +1,14 @@
+{
+  "staging": {
+    "branch": "develop",
+    "clasp": "code/.clasp.staging.json",
+    "deploymentId": "AKfycbyApuZunWwi2p3ZPb43wOluXpC7cVppYVd5k6smkjZBJTXoS6cWDiUgTorPi4jmSvlM",
+    "url": "https://script.google.com/macros/s/AKfycbyApuZunWwi2p3ZPb43wOluXpC7cVppYVd5k6smkjZBJTXoS6cWDiUgTorPi4jmSvlM/exec"
+  },
+  "prod": {
+    "branch": "master",
+    "clasp": "code/.clasp.prod.json",
+    "deploymentId": "AKfycbwJpwx7cUynhoeTQsBbdCUHKvCgS_1O1Q0YD9G4-XT8QFRPu2weyPgxwZW5HKKW9z-3KQ",
+    "url": "https://script.google.com/macros/s/AKfycbwJpwx7cUynhoeTQsBbdCUHKvCgS_1O1Q0YD9G4-XT8QFRPu2weyPgxwZW5HKKW9z-3KQ/exec"
+  }
+}

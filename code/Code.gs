@@ -84,7 +84,20 @@ function doGet(e) {
     return cpGoogleAuthResultPage_(googleAuthResult);
   }
 
+  // Diagnóstico: ¿funciona la cámara dentro de una página de Apps Script? (no usa datos)
+  if (e && e.parameter && e.parameter.page === 'camera') return gbCameraTestPage_();
+
+  // Páginas que se comparten por enlace (cada una valida su propio token o firma).
+  if (e && e.parameter) {
+    if (e.parameter.comprobante) return gbVoucherPage_(e.parameter.comprobante);
+    if (e.parameter.reporte) {
+      return gbReportPage_(e.parameter.reporte, e.parameter.m, e.parameter.r, e.parameter.s);
+    }
+    if (e.parameter.carnet) return gbCarnetPage_(e.parameter.carnet);
+  }
+
   // Endpoint JSON opcional: ?api=data (útil para depurar o consumir desde otro cliente).
+  // Solo publica el contenido del sitio web; nunca datos de miembros.
   if (e && e.parameter && e.parameter.api === 'data') {
     return json_(getWebsiteData());
   }
@@ -92,7 +105,7 @@ function doGet(e) {
   // Acceso al panel de administración desde la web: ?page=admin o ?admin
   if (e && e.parameter && (e.parameter.page === 'admin' || e.parameter.admin !== undefined)) {
     var adminTemplate = HtmlService.createTemplateFromFile('ConfigPanel/ConfigPanel');
-    adminTemplate.activeTab = e.parameter.tab || 'sitio';
+    adminTemplate.activeTab = e.parameter.tab || 'progreso';
     adminTemplate.webAppUrl = getWebsiteUrl();
     adminTemplate.isWebApp = true;
     adminTemplate.googleAuthStartUrl = GOOGLE_AUTH_START_URL;
@@ -130,6 +143,21 @@ function doGet(e) {
   }
 
   return output;
+}
+
+/**
+ * Escáner de asistencia (tablet). Recibe JSON como texto: { action, device, code }.
+ * El cliente envía "text/plain" para evitar la petición previa (preflight) de CORS.
+ * Todo se valida en gbScanApi_ (token de dispositivo, límites de intentos).
+ */
+function doPost(e) {
+  var payload;
+  try {
+    payload = JSON.parse((e && e.postData && e.postData.contents) || '{}');
+  } catch (_) {
+    return json_({ ok: false, error: 'Solicitud no válida.' });
+  }
+  return json_(gbScanApi_(payload));
 }
 
 /**
@@ -214,7 +242,7 @@ function getWebsiteUrl() {
 /**
  * Fuerza a releer la hoja en la siguiente carga (borra la caché).
  */
-function refreshData() {
+function refreshData_() {
   CacheService.getScriptCache().remove('gymbars:data');
   return 'Caché del sitio eliminada.';
 }
@@ -226,12 +254,27 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('Gymbars')
     .addItem('Abrir panel de administración', 'showAdminPanel')
+    .addItem('Miembros y pagos', 'gbOpenMembersPanel_')
+    .addItem('Mensajes pendientes', 'gbOpenMessagesPanel_')
+    .addItem('Asistencia de hoy', 'gbOpenAttendancePanel_')
+    .addItem('Progreso', 'gbOpenProgressPanel_')
     .addSeparator()
     .addItem('Abrir sitio web', 'showWebsiteUrl_')
-    .addItem('Crear pestañas faltantes', 'setupSheets')
-    .addItem('Limpiar caché del sitio', 'refreshData')
+    .addItem('Crear pestañas faltantes', 'setupSheets_')
+    .addItem('Limpiar caché del sitio', 'refreshData_')
+    .addSeparator()
+    .addItem('Migración: simulacro (no escribe)', 'gbMigrationDryRunMenu_')
+    .addItem('Migración: importar datos del Excel', 'gbMigrationImportMenu_')
+    .addItem('Verificar datos migrados', 'gbMigrationVerifyMenu_')
+    .addItem('Cargar datos de ejemplo (solo pruebas)', 'gbSeedDemoMenu_')
     .addToUi();
 }
+
+// Atajos de la hoja: abren el panel completo (con todas las funciones) en cada sección.
+function gbOpenMembersPanel_() { showAdminPanel('miembros'); }
+function gbOpenMessagesPanel_() { showAdminPanel('mensajes'); }
+function gbOpenAttendancePanel_() { showAdminPanel('asistencia'); }
+function gbOpenProgressPanel_() { showAdminPanel('progreso'); }
 
 function showWebsiteUrl_() {
   var url = getWebsiteUrl();
@@ -248,7 +291,7 @@ function showWebsiteUrl_() {
  * No borra ni sobrescribe datos existentes: solo agrega lo que falta.
  * Ejecutar una vez después de crear la hoja (o desde el menú Gymbars).
  */
-function setupSheets() {
+function setupSheets_() {
   var ss = ss_();
   var specs = [
     { name: SHEETS.site,            headers: ['Clave', 'Valor'] },
@@ -275,6 +318,9 @@ function setupSheets() {
       sheet.setFrozenRows(1);
     }
   });
+
+  // Pestañas del sistema de gestión (miembros, pagos, asistencia, mensajes…).
+  created = created.concat(gbSetupSchemaSheets_(ss));
 
   log_('setupSheets', 'OK', created.length ? 'Creadas: ' + created.join(', ') : 'Sin cambios');
   return created.length ? 'Pestañas creadas: ' + created.join(', ') : 'Todo estaba en su lugar.';

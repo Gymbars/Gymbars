@@ -116,166 +116,6 @@ var CP_SITE_GROUPS_ = [
 // ===  Autenticación y Permisos del Panel Web               ===
 // ============================================================
 
-/**
- * Comprueba si un correo de Google tiene acceso a la hoja de cálculo
- * (como propietario, editor o lector).
- *
- * @param {string} email
- * @return {boolean}
- */
-function cpIsEmailAuthorizedForSheet(email) {
-  if (!email) return false;
-  var target = String(email).trim().toLowerCase();
-  if (!target) return false;
-
-  try {
-    var ss = cpSpreadsheet_();
-    if (!ss) return false;
-
-    // 1. Propietario de la hoja
-    try {
-      var owner = ss.getOwner();
-      if (owner && owner.getEmail() && owner.getEmail().trim().toLowerCase() === target) {
-        return true;
-      }
-    } catch (e1) {
-      log_('cpIsEmailAuthorized', 'WARN', 'ss.getOwner: ' + e1.toString());
-    }
-
-    // 2. Editores de la hoja
-    try {
-      var editors = ss.getEditors();
-      for (var i = 0; i < editors.length; i++) {
-        var ed = editors[i].getEmail();
-        if (ed && ed.trim().toLowerCase() === target) return true;
-      }
-    } catch (e2) {
-      log_('cpIsEmailAuthorized', 'WARN', 'ss.getEditors: ' + e2.toString());
-    }
-
-    // 3. Lectores de la hoja
-    try {
-      var viewers = ss.getViewers();
-      for (var j = 0; j < viewers.length; j++) {
-        var vw = viewers[j].getEmail();
-        if (vw && vw.trim().toLowerCase() === target) return true;
-      }
-    } catch (e3) {
-      log_('cpIsEmailAuthorized', 'WARN', 'ss.getViewers: ' + e3.toString());
-    }
-
-    // 4. Permisos directos en DriveApp
-    try {
-      var file = DriveApp.getFileById(ss.getId());
-      if (file) {
-        var fOwner = file.getOwner();
-        if (fOwner && fOwner.getEmail() && fOwner.getEmail().trim().toLowerCase() === target) return true;
-
-        var fEds = file.getEditors();
-        for (var k = 0; k < fEds.length; k++) {
-          if (fEds[k].getEmail() && fEds[k].getEmail().trim().toLowerCase() === target) return true;
-        }
-
-        var fVws = file.getViewers();
-        for (var l = 0; l < fVws.length; l++) {
-          if (fVws[l].getEmail() && fVws[l].getEmail().trim().toLowerCase() === target) return true;
-        }
-
-        var access = file.getAccess(target);
-        if (access === DriveApp.Permission.OWNER ||
-            access === DriveApp.Permission.EDIT ||
-            access === DriveApp.Permission.VIEW ||
-            access === DriveApp.Permission.COMMENT) {
-          return true;
-        }
-      }
-    } catch (e4) {}
-
-  } catch (err) {
-    log_('cpIsEmailAuthorized', 'ERROR', err.toString());
-  }
-
-  return false;
-}
-
-/**
- * Valida si el usuario actual o token tiene acceso administrativo.
- *
- * @param {string} [token]
- * @return {Object}
- */
-function cpVerifyAdminAccess(token) {
-  // 1. Si Session.getActiveUser() está disponible
-  try {
-    var activeEmail = Session.getActiveUser().getEmail();
-    if (activeEmail && cpIsEmailAuthorizedForSheet(activeEmail)) {
-      return {
-        success: true,
-        authorized: true,
-        email: activeEmail.trim().toLowerCase(),
-        method: 'activeUser'
-      };
-    }
-  } catch (_) {}
-
-  // 2. Token de sesión (generado con Google Sign-In)
-  if (!token) {
-    return {
-      success: true,
-      authorized: false,
-      needLogin: true,
-      error: 'Inicia sesión con tu cuenta de Google.'
-    };
-  }
-
-  var raw = PropertiesService.getScriptProperties().getProperty('CP_SESSION_' + token);
-  if (!raw) {
-    return {
-      success: true,
-      authorized: false,
-      needLogin: true,
-      error: 'Sesión expirada o no válida. Inicia sesión con Google.'
-    };
-  }
-
-  try {
-    var s = JSON.parse(raw);
-    if (Date.now() > s.expiry) {
-      PropertiesService.getScriptProperties().deleteProperty('CP_SESSION_' + token);
-      return {
-        success: true,
-        authorized: false,
-        needLogin: true,
-        error: 'Sesión expirada.'
-      };
-    }
-
-    var email = String(s.email || '').trim().toLowerCase();
-    if (cpIsEmailAuthorizedForSheet(email)) {
-      return {
-        success: true,
-        authorized: true,
-        email: email,
-        method: 'session'
-      };
-    }
-
-    return {
-      success: true,
-      authorized: false,
-      unauthorized: true,
-      email: email,
-      error: 'La cuenta ' + email + ' no tiene permisos en la hoja de cálculo de Google. Solicita al propietario que comparta el Google Sheet con tu correo.'
-    };
-  } catch (e) {
-    return {
-      success: true,
-      authorized: false,
-      needLogin: true,
-      error: 'Error al validar sesión.'
-    };
-  }
-}
 
 /** Base64 URL-safe without padding. */
 function cpB64url_(data) {
@@ -306,7 +146,7 @@ function cpCompleteGoogleAuth_(payload, signature, nonce) {
     if (!payload || !signature || !nonce) return fail('Solicitud inválida');
     if (!/^[A-Za-z0-9-]{16,80}$/.test(nonce)) return fail('Solicitud inválida');
 
-    var expected = cpB64url_(Utilities.computeHmacSha256Signature(payload, GOOGLE_AUTH_SHARED_SECRET));
+    var expected = cpB64url_(Utilities.computeHmacSha256Signature(payload, gbAuthSecret_()));
     if (!cpSafeEquals_(expected, String(signature))) return fail('Firma inválida');
 
     var decoded = Utilities.newBlob(Utilities.base64DecodeWebSafe(payload)).getDataAsString();
@@ -324,6 +164,7 @@ function cpCompleteGoogleAuth_(payload, signature, nonce) {
     if (cache.get(usedKey)) return fail('Esta verificación ya fue utilizada');
     cache.put(usedKey, '1', 600);
 
+    gbPurgeSessions_();
     var token = Utilities.getUuid();
     var sessionExpiry = Date.now() + 7 * 24 * 60 * 60 * 1000;
     PropertiesService.getScriptProperties().setProperty('CP_SESSION_' + token, JSON.stringify({
@@ -415,7 +256,7 @@ function cpLogoutAdmin(token) {
  */
 function showAdminPanel(activeTab) {
   var template = HtmlService.createTemplateFromFile('ConfigPanel/ConfigPanel');
-  template.activeTab = activeTab || 'sitio';
+  template.activeTab = activeTab || 'progreso';
   template.webAppUrl = cpSafeWebsiteUrl_();
   template.isWebApp = false;
   template.googleAuthStartUrl = GOOGLE_AUTH_START_URL;
@@ -442,7 +283,7 @@ function cpSafeWebsiteUrl_() {
  *
  * @return {Object}
  */
-function cpGetData() {
+function cpGetData_() {
   var sheet = cpSpreadsheet_();
 
   var data = {
@@ -499,7 +340,7 @@ function cpReadImages_() {
       pos: normalizePosValue_(row[2]),
       source: cpText_(row[3]),
       fit: normalizeFitValue_(row[4]),
-      thumb: convertImageUrl(url)
+      thumb: convertImageUrl_(url)
     });
   });
   return images;
@@ -678,8 +519,14 @@ function cpImagesUsage_() {
 /** @return {Array<Object>} */
 function cpTabStatus_() {
   var sheet = cpSpreadsheet_();
-  return Object.keys(SHEETS).map(function (key) {
-    var name = SHEETS[key];
+  // Pestañas del sitio + pestañas del sistema de gestión (Schema.gs).
+  var names = {};
+  Object.keys(SHEETS).forEach(function (key) { names[key] = SHEETS[key]; });
+  var system = gbSheetNames_();
+  Object.keys(system).forEach(function (key) { names['gb_' + key] = system[key]; });
+
+  return Object.keys(names).map(function (key) {
+    var name = names[key];
     var tab = sheet.getSheetByName(name);
     return {
       key: key,
@@ -711,7 +558,7 @@ function cpFolderInfo_() {
  * @param {Array<{key: string, value: string}>} rows
  * @return {Object}
  */
-function cpSaveSite(rows) {
+function cpSaveSite_(rows) {
   if (!rows || !rows.length) throw new Error('No hay datos del sitio para guardar.');
 
   var seen = {};
@@ -750,7 +597,7 @@ function cpSaveSite(rows) {
  * @param {Array<Object>} rows {ref, url, pos, fit, source, oldRef}
  * @return {Object}
  */
-function cpSaveImages(rows) {
+function cpSaveImages_(rows) {
   if (!rows) throw new Error('No hay imágenes para guardar.');
 
   var previous = cpImageRefs_();
@@ -770,7 +617,7 @@ function cpSaveImages(rows) {
     seen[ref.toLowerCase()] = true;
 
     var url = cpText_(row.url);
-    if (url && !convertImageUrl(url)) {
+    if (url && !convertImageUrl_(url)) {
       throw new Error('La URL de «' + ref + '» no es válida. Pega un enlace de Drive o una URL https.');
     }
 
@@ -855,7 +702,7 @@ function cpApplyImageRenames_(renames) {
 // ============================================================
 
 /** @param {Array<Object>} rows @return {Object} */
-function cpSaveCarousel(rows) {
+function cpSaveCarousel_(rows) {
   var images = cpImageRefs_();
   var clean = [];
 
@@ -876,7 +723,7 @@ function cpSaveCarousel(rows) {
 }
 
 /** @param {Array<Object>} rows @return {Object} */
-function cpSaveFeatures(rows) {
+function cpSaveFeatures_(rows) {
   var images = cpImageRefs_();
   var clean = [];
 
@@ -906,7 +753,7 @@ function cpSaveFeatures(rows) {
  * @param {Array<Object>} rows
  * @return {Object}
  */
-function cpSavePrograms(rows) {
+function cpSavePrograms_(rows) {
   var images = cpImageRefs_();
   var titles = {};
   var programs = [];
@@ -950,7 +797,7 @@ function cpSavePrograms(rows) {
  * @param {Array<Object>} rows [{day, color, shifts:[{label,time}]}]
  * @return {Object}
  */
-function cpSaveSchedule(rows) {
+function cpSaveSchedule_(rows) {
   var days = {};
   var clean = [];
   var order = 0;
@@ -993,7 +840,7 @@ function cpSaveSchedule(rows) {
 }
 
 /** @param {Array<Object>} rows @return {Object} */
-function cpSaveSocial(rows) {
+function cpSaveSocial_(rows) {
   var clean = [];
 
   (rows || []).forEach(function (row) {
@@ -1023,7 +870,7 @@ function cpSaveSocial(rows) {
  * @param {string} [subPath] Ruta relativa, ej. 'gallery'.
  * @return {Object}
  */
-function cpListImages(subPath) {
+function cpListImages_(subPath) {
   var path = cpCleanPath_(subPath);
   var folder = cpFolder_(path, false);
 
@@ -1080,7 +927,7 @@ function cpListImages(subPath) {
  * @param {boolean} [registerRef]
  * @return {Object}
  */
-function cpUploadImage(base64Data, filename, mimeType, subPath, registerRef) {
+function cpUploadImage_(base64Data, filename, mimeType, subPath, registerRef) {
   if (!base64Data) throw new Error('El archivo llegó vacío.');
 
   var data = String(base64Data);
@@ -1192,7 +1039,7 @@ function cpCheckDriveImage_(id) {
  * petición HTTP y comprueba el tipo de contenido.
  * @return {Array<Object>}
  */
-function cpCheckImages() {
+function cpCheckImages_() {
   var images = cpReadImages_();
   var results = [];
 
@@ -1234,14 +1081,14 @@ function cpCheckImages() {
 // ============================================================
 
 /** Limpia la caché del sitio público. */
-function cpRefreshCache() {
-  refreshData();
+function cpRefreshCache_() {
+  refreshData_();
   return cpOk_('Caché del sitio eliminada. Los cambios ya se ven al recargar.');
 }
 
 /** Crea las pestañas que falten (no borra datos). */
-function cpSetupSheets() {
-  var message = setupSheets();
+function cpSetupSheets_() {
+  var message = setupSheets_();
   return cpOk_(message);
 }
 
@@ -1249,7 +1096,7 @@ function cpSetupSheets() {
  * Copia la hoja de cálculo junto al archivo original.
  * @return {Object}
  */
-function cpBackup() {
+function cpBackup_() {
   var sheet = cpSpreadsheet_();
   var stamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH-mm');
   var copy = DriveApp.getFileById(sheet.getId())
@@ -1352,7 +1199,8 @@ function cpFolderId_() {
   try {
     custom = PropertiesService.getScriptProperties().getProperty(CP_FOLDER_PROPERTY) || '';
   } catch (_) {}
-  return String(custom || CP_IMAGE_FOLDER_ID).trim();
+  // Acepta el ID o el enlace completo de la carpeta (así se evita pegar mal el valor).
+  return gbDriveId_(custom) || String(CP_IMAGE_FOLDER_ID).trim();
 }
 
 /**

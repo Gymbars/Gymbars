@@ -4,10 +4,30 @@ Migración de **gymbarsgt.com** (Firebase Hosting + Cloud Firestore) a **Google 
 usando una **hoja de cálculo como base de datos** para gestionar el contenido del sitio
 y su panel de administración.
 
+> **Gestión del gimnasio** (miembros, pagos, medidas, evaluaciones, asistencia con QR, mensajes y
+> automatización): ver [`GESTION.md`](GESTION.md). El escáner del tablet está en [`../checkin`](../checkin/README.md).
+
 ```
 code/
-├── Code.gs                    # doGet, include(), logger, menú, setupSheets()
+├── Code.gs                    # doGet/doPost, include(), logger, menú, setupSheets_()
 ├── WebsiteService.gs          # Lee la hoja y arma el modelo JSON del sitio
+│
+│   # --- Sistema de gestión del gimnasio (ver GESTION.md) ---
+├── Auth.gs                    # Roles (Admin/Coach), sesión y verificación SIEMPRE en el servidor
+├── Api.gs                     # gbApi: única puerta del panel (valida sesión y rol en cada llamada)
+├── Modules.gs                 # Registro de acciones de gestión y sus roles
+├── Schema.gs                  # Pestañas de datos, encabezados, listas, datos iniciales
+├── Repo.gs                    # Leer/escribir por nombre de columna, con bloqueo y crecimiento de hoja
+├── Rules.gs                   # Reglas puras: próximo pago, estado de pago, puntaje, WhatsApp
+├── Members.gs  Payments.gs  Measurements.gs  Evaluations.gs
+├── Messaging.gs               # Bandeja de mensajes, plantillas, enlaces, correo
+├── Pages.gs                   # Páginas públicas: boleta, reportes, carnet con QR
+├── Attendance.gs              # Asistencia (QR/manual), dispositivos y endpoint del tablet
+├── Triggers.gs                # Automatización diaria y configuración
+├── Progress.gs                # Panorama: a quién atender, visitas por semana
+├── Wallet.gs                  # Carnet y pase de Google Wallet
+├── Migration.gs               # Importar los CSV generados desde el Excel
+├── DemoData.gs                # Datos inventados (solo entorno de pruebas)
 ├── Index.html                 # Shell: fuentes, tema, parciales
 ├── Styles.html                # Variables CSS y estilos base
 ├── Navbar/
@@ -36,9 +56,13 @@ code/
 │   ├── TabProgramas/          # Rutinas + instrucciones/ejercicios
 │   ├── TabHorario/            # Días, turnos y colores
 │   ├── TabRedes/              # Redes sociales e iconos
-│   └── TabSistema/            # Respaldo, caché, diagnóstico y bitácora
+│   ├── TabSistema/            # Respaldo, caché, diagnóstico y bitácora
+│   ├── Gestion/               # Utilidades compartidas de las pestañas de gestión
+│   ├── TabProgreso/  TabMiembros/  TabAsistencia/  TabMensajes/  TabAjustes/
 ├── appsscript.json
-├── .clasp.json.example
+├── .clasp.staging.json        # Proyecto de pruebas (ver ../DEPLOY.md)
+├── .clasp.prod.json           # Proyecto de producción
+├── .claspignore               # Solo se suben .gs, .html y appsscript.json
 └── README.md
 ```
 
@@ -159,7 +183,7 @@ Si no existe, se usa la carpeta indicada en la sección **Imágenes**.
    `Ajuste` define `cover` (recorta para llenar) o `contain` (muestra completa,
    ideal para logos y banners).
 
-`convertImageUrl()` en `WebsiteService.gs` transforma los enlaces de Drive a
+`convertImageUrl_()` en `WebsiteService.gs` transforma los enlaces de Drive a
 `https://lh3.googleusercontent.com/d/<ID>` (el formato que sí carga en un `<img>`).
 
 Las imágenes se renderizan con `<img loading="lazy">` y un reintento automático:
@@ -178,25 +202,22 @@ en lugar de una imagen rota.
 
 ## Despliegue
 
+Hay dos entornos (pruebas y producción), cada uno con su propia hoja y su propio proyecto de Apps Script.
+El proceso completo, la vuelta atrás y la lista de pruebas están en **[`../DEPLOY.md`](../DEPLOY.md)**.
+
 ```bash
-# 1. Crear el proyecto de Apps Script (script.google.com) y copiar su ID
-cp code/.clasp.json.example code/.clasp.json
-# editar "scriptId"
-
-# 2. Subir
-npx @google/clasp push
-
-# 3. Publicar: Implementar → Nueva implementación → Aplicación web
-#    Ejecutar como: Yo · Acceso: Cualquier persona
+npm run deploy:staging     # rama develop → hoja de pruebas
+npm run deploy:prod        # rama master  → hoja real (pide confirmar el respaldo; vuelve solo si falla)
 ```
 
-En el editor de Apps Script, ejecutar una vez `setupSheets()` para crear las
-pestañas faltantes (la hoja ya viene poblada) y luego implementar el Web App.
+No uses `clasp push` a secas: `code/.clasp.json` ya no existe a propósito (hay `.clasp.staging.json` y `.clasp.prod.json`),
+así que un `clasp push` sin indicar el entorno falla en vez de cambiar producción por accidente.
 
 > **Importante al actualizar:** `appsscript.json` incluye permisos adicionales:
 > `drive` (listar la carpeta y subir imágenes), `script.external_request`
 > (comprobar enlaces de imágenes), `script.container.ui` (abrir el panel como
-> diálogo) y `script.scriptapp` (obtener la URL del sitio). Al subir esta versión
+> diálogo), `script.scriptapp` (URL del sitio y disparador diario) y
+> `script.send_mail` (correos automáticos del sistema de gestión). Al subir esta versión
 > hay que **volver a autorizar** el script y publicar una **nueva versión** de la
 > implementación; si no, el panel fallará al abrirse o al usar Drive. La
 > implementación anterior sigue activa hasta que se crea la nueva versión.
