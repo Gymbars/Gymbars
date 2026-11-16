@@ -87,14 +87,12 @@ function doGet(e) {
   // Diagnóstico: ¿funciona la cámara dentro de una página de Apps Script? (no usa datos)
   if (e && e.parameter && e.parameter.page === 'camera') return gbCameraTestPage_();
 
-  // Páginas que se comparten por enlace (cada una valida su propio token o firma).
-  if (e && e.parameter) {
-    if (e.parameter.comprobante) return gbVoucherPage_(e.parameter.comprobante);
-    if (e.parameter.reporte) {
-      return gbReportPage_(e.parameter.reporte, e.parameter.m, e.parameter.r, e.parameter.s);
-    }
-    if (e.parameter.carnet) return gbCarnetPage_(e.parameter.carnet);
-  }
+  // Comprobación de la instalación (la usa el despliegue): solo dice si faltan pestañas. No lee datos.
+  if (e && e.parameter && e.parameter.api === 'health') return json_(gbHealth_());
+
+  // Páginas que se comparten por enlace (comprobante, reporte, carnet): ver gbPublicRoute_ en Pages.gs.
+  var shared = gbPublicRoute_(e);
+  if (shared) return shared;
 
   // Endpoint JSON opcional: ?api=data (útil para depurar o consumir desde otro cliente).
   // Solo publica el contenido del sitio web; nunca datos de miembros.

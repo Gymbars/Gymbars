@@ -874,3 +874,29 @@ test('wallet: la comprobación explica qué falta (sin configurar, clave rechaza
   assert.ok(calls.some(u => u.endsWith('/issuer/3388000000012345')));
   assert.ok(!JSON.stringify(ok).includes('PRIVATE'), 'nunca devuelve la clave');
 });
+
+test('instalación: gbHealth_ lista las pestañas que faltan; sin ellas los enlaces dicen "no válido" y no muestran errores', () => {
+  const h = env();
+  const ok = h.plain(h.ctx.gbHealth_());
+  assert.equal(ok.ok, true);
+  assert.deepEqual(ok.faltan, []);
+
+  const m = h.addMember({ Nombres: 'Ana', Apellidos: 'Gómez' });
+  delete h.sheets['Miembros'];
+  delete h.sheets['Dispositivos'];
+  const bad = h.plain(h.ctx.gbHealth_());
+  assert.equal(bad.ok, false);
+  assert.deepEqual(bad.faltan.sort(), ['Dispositivos', 'Miembros']);
+  assert.ok(!/DPI|Telefono|TokenQR/.test(JSON.stringify(bad)), 'solo nombres de pestañas');
+
+  const page = h.ctx.gbPublicRoute_({ parameter: { carnet: m.TokenQR } }).html;
+  assert.match(page, /Enlace no v/);
+  assert.ok(!/Falta la pesta|Error:|TypeError/.test(page), 'no se muestra el detalle del error');
+  assert.equal(h.ctx.gbPublicRoute_({ parameter: { page: 'admin' } }), null, 'otras rutas no se tocan');
+});
+
+test('doGet: ?api=health se atiende antes que las páginas y no necesita sesión', () => {
+  const src = readFileSync(new URL('../../code/Code.gs', import.meta.url), 'utf8');
+  assert.match(src, /api === 'health'\) return json_\(gbHealth_\(\)\)/);
+  assert.match(src, /gbPublicRoute_\(e\)/);
+});

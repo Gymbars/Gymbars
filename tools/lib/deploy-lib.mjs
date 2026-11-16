@@ -45,7 +45,7 @@ export function checkBranch({ env, branch, expected }) {
 // ------------------------------------------------------------ pruebas del sitio publicado
 
 /** Una pasada de comprobaciones contra la URL publicada. */
-export async function smokeOnce({ url, fetch }) {
+export async function smokeOnce({ url, fetch, basic = false }) {
   const checks = [];
   const add = (name, ok, detail = '') => checks.push({ name, ok, detail });
   const POST = body => ({ method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) });
@@ -58,6 +58,25 @@ export async function smokeOnce({ url, fetch }) {
     add('El JSON público trae el sitio', r.status === 200 && json && typeof json === 'object' && 'site' in json, `HTTP ${r.status}`);
     add('El JSON público no filtra datos de miembros', !leak, leak ? 'se encontraron campos o números de DPI' : '');
   } catch (e) { add('El JSON público trae el sitio', false, String(e.message || e)); }
+
+  if (basic) {   // tras volver a una versión anterior solo se comprueba lo que ese código ya sabía hacer
+    try {
+      const r = await fetch(url + '?page=admin');
+      const text = await r.text();
+      add('El panel carga', r.status === 200 && text.includes('cp-app'), `HTTP ${r.status}`);
+    } catch (e) { add('El panel carga', false, String(e.message || e)); }
+    return checks;
+  }
+
+  try {   // 1b. La hoja tiene las pestañas del sistema (si no, el código nuevo falla por dentro)
+    const r = await fetch(url + '?api=health');
+    const json = JSON.parse(await r.text());
+    const missing = Array.isArray(json.faltan) ? json.faltan : null;
+    add('La hoja tiene todas las pestañas del sistema', json.ok === true && missing && !missing.length,
+      missing && missing.length
+        ? `faltan: ${missing.join(', ')}. En esa hoja: Gymbars → Crear pestañas faltantes (y autoriza los permisos con onOpen).`
+        : 'el código publicado no responde la comprobación (¿versión anterior?)');
+  } catch (e) { add('La hoja tiene todas las pestañas del sistema', false, String(e.message || e)); }
 
   try {   // 2. El código nuevo está publicado (enlace inexistente → página "no válido")
     const r = await fetch(url + '?carnet=' + '0'.repeat(24));
@@ -81,10 +100,10 @@ export async function smokeOnce({ url, fetch }) {
 }
 
 /** Repite las comprobaciones unos intentos (una versión nueva tarda unos segundos en propagarse). */
-export async function runSmoke({ url, fetch, attempts = 5, delayMs = 4000, sleep = ms => new Promise(r => setTimeout(r, ms)) }) {
+export async function runSmoke({ url, fetch, attempts = 5, delayMs = 4000, basic = false, sleep = ms => new Promise(r => setTimeout(r, ms)) }) {
   let checks = [];
   for (let i = 1; i <= attempts; i++) {
-    checks = await smokeOnce({ url, fetch });
+    checks = await smokeOnce({ url, fetch, basic });
     if (checks.every(c => c.ok)) return { ok: true, checks, attempts: i };
     if (i < attempts) await sleep(delayMs);
   }
@@ -199,8 +218,10 @@ export async function runDeploy({ env, config, options = {}, io }) {
     if (back.code !== 0) {
       return fail('rollback', `NO se pudo volver atrás automáticamente. Hazlo a mano: Implementar → Administrar implementaciones → editar → versión ${previousVersion}.`, { version, previousVersion });
     }
-    const after = await runSmoke({ url: cfg.url, fetch: io.fetch, attempts: 3, sleep: io.sleep });
-    log(after.ok ? `✔ Producción volvió a la versión ${previousVersion} y responde bien.` : '⚠ Volvió a la versión anterior pero las pruebas siguen fallando: revisa a mano.');
+    // La versión anterior es código viejo: solo se le piden las comprobaciones básicas (el panel responde).
+    const after = await runSmoke({ url: cfg.url, fetch: io.fetch, attempts: 3, basic: true, sleep: io.sleep });
+    log(after.ok ? `✔ Producción volvió a la versión ${previousVersion} y el panel responde. El sitio quedó como estaba antes del despliegue.`
+      : '⚠ Volvió a la versión anterior pero el panel no responde: revisa a mano.');
     return fail('smoke', `El despliegue falló y se revirtió a la versión ${previousVersion}.`, { version, previousVersion, rolledBack: true, rollbackHealthy: after.ok });
   }
   return fail('smoke', `Las pruebas del sitio publicado fallaron (${env}). Revisa los detalles de arriba.`, { version, previousVersion });
