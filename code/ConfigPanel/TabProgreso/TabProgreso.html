@@ -73,7 +73,16 @@
       '</ul>' +
       '<p class="cp-hint" style="margin-top:12px">Activos ' + m.activos + ' · Inactivos ' + m.inactivos + ' · Suspendidos ' + m.suspendidos + '</p>';
 
-    root.innerHTML = stats + banner +
+    var hiddenInfo = o.sinSeguimiento || { cantidad: 0, dias: 0 };
+    var stale = '';
+    if (hiddenInfo.cantidad > 0) {
+      stale = '<div class="cp-gb-note">' + hiddenInfo.cantidad + (hiddenInfo.cantidad === 1 ? ' miembro lleva' : ' miembros llevan') +
+        ' más de ' + hiddenInfo.dias + ' días sin actividad (pagos, visitas ni medidas) y no aparecen en esta lista. ' +
+        (gbIsAdmin() ? '<button type="button" class="cp-btn cp-btn--small" id="gb-p-archive" style="margin-left:6px">Archivar como inactivos</button> ' : '') +
+        '<span class="cp-hint">Se reactivan solos al registrarles un pago. Los días se cambian en Ajustes.</span></div>';
+    }
+
+    root.innerHTML = stats + banner + stale +
       '<div class="cp-gb-cols">' +
         '<div><div class="cp-gb-section-head"><h3>Necesitan atención (' + o.totalAtencion + ')</h3></div>' + attention + '</div>' +
         '<div>' +
@@ -85,6 +94,18 @@
   }
 
   document.addEventListener('click', function (e) {
+    if (e.target.closest('#gb-p-archive')) {
+      gbConfirm('Los miembros sin actividad pasarán a «Inactivo». No se borra nada y se reactivan al registrar un pago.',
+        { title: 'Archivar miembros sin actividad', okLabel: 'Archivar' }, function () {
+        gbCall('progress.archiveStale', [], function (r) {
+          if (!r.ok) { cpToast(r.message, 'warn'); return; }
+          cpToast(r.cambiados + (r.cambiados === 1 ? ' miembro archivado.' : ' miembros archivados.'), 'ok');
+          gbInvalidateMembers();
+          gbShowProgress();
+        });
+      });
+      return;
+    }
     var row = e.target.closest('#gb-progress [data-open]');
     if (row && typeof gbOpenMember === 'function') gbOpenMember(row.getAttribute('data-open'), row.getAttribute('data-name'));
   });

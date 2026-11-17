@@ -61,6 +61,7 @@ function gbModuleActions_(ADMIN, ANY) {
 
     // --- Progreso (panorama del día) ---
     'progress.overview':     { roles: ANY,   fn: gbProgressOverview_ },
+    'progress.archiveStale': { roles: ADMIN, fn: gbArchiveStale_ },
 
     // --- Configuración ---
     'config.get':            { roles: ADMIN, fn: gbConfigGetApi_ },

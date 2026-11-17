@@ -20,6 +20,38 @@ function gbWeekStart_(value) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate() - (day - 1), 12);
 }
 
+/** Orden de la lista: primero los que están al día y al final los que más deben (peor estado = más abajo). */
+function gbPaymentRank_(code) {
+  return { al_dia: 0, por_vencer: 1, gracia: 2, vencido: 3, sin_pagos: 4 }[code];
+}
+
+/**
+ * Días desde la última actividad de un miembro: pago, visita o medidas. Si nunca tuvo ninguna,
+ * se cuenta desde su fecha de registro. '' si no hay ninguna fecha.
+ */
+function gbDaysSinceActivity_(m, lastPay, lastAtt, lastMeas, todayDate) {
+  var latest = null;
+  [lastPay[m.MemberID], lastAtt[m.MemberID], lastMeas[m.MemberID]].forEach(function (d) {
+    if (d && (!latest || d > latest)) latest = d;
+  });
+  if (!latest) latest = gbParseDate_(m.FechaRegistro);
+  return latest ? gbDaysBetween_(latest, todayDate) : '';
+}
+
+/** ¿Pasó más tiempo sin actividad que el configurado? (límite 0 = nunca se deja de dar seguimiento) */
+function gbIsStale_(days, limit) {
+  return limit > 0 && days !== '' && days > limit;
+}
+
+function gbLastMeasurementMap_() {
+  var map = {};
+  gbList_('measurements').forEach(function (x) {
+    var d = gbParseDate_(x.Fecha);
+    if (d && (!map[x.MemberID] || d > map[x.MemberID])) map[x.MemberID] = d;
+  });
+  return map;
+}
+
 function gbDaysText_(n) {
   return n + (n === 1 ? ' día' : ' días');
 }
@@ -40,11 +72,9 @@ function gbProgressOverview_() {
   var lastPay = gbLastPaymentMap_();
   var attendance = gbListTail_('attendance', 4000);
   var lastAtt = gbLastAttendanceMap_(attendance);
-  var lastMeas = {};
-  gbList_('measurements').forEach(function (x) {
-    var d = gbParseDate_(x.Fecha);
-    if (d && (!lastMeas[x.MemberID] || d > lastMeas[x.MemberID])) lastMeas[x.MemberID] = d;
-  });
+  var lastMeas = gbLastMeasurementMap_();
+  var trackingDays = gbConfigNumber_('seguimiento_dias', 0);
+  var hidden = 0;
 
   var counts = { activos: 0, inactivos: 0, suspendidos: 0, pago: { al_dia: 0, por_vencer: 0, gracia: 0, vencido: 0, sin_pagos: 0 } };
   var attention = [];
@@ -56,6 +86,9 @@ function gbProgressOverview_() {
 
     var status = gbPaymentStatus_(m, lastPay[m.MemberID], today, options);
     counts.pago[status.code]++;
+
+    // Mucho tiempo sin actividad: ya no se les da seguimiento (no aparecen en la lista; se pueden archivar).
+    if (gbIsStale_(gbDaysSinceActivity_(m, lastPay, lastAtt, lastMeas, todayDate), trackingDays)) { hidden++; return; }
     var reasons = [];
 
     if (status.code === 'vencido') reasons.push({ code: 'pago_vencido', texto: 'Mensualidad vencida hace ' + gbDaysText_(status.daysOverdue) });
@@ -84,7 +117,10 @@ function gbProgressOverview_() {
       });
     }
   });
-  attention.sort(function (a, b) { return b.prioridad - a.prioridad || a.nombre.localeCompare(b.nombre, 'es'); });
+  // Primero los que están al día, al final los de peor estado; dentro de cada grupo, lo más urgente y luego por nombre.
+  attention.sort(function (a, b) {
+    return gbPaymentRank_(a.pago.code) - gbPaymentRank_(b.pago.code) || b.prioridad - a.prioridad || a.nombre.localeCompare(b.nombre, 'es');
+  });
 
   // Asistencia por semana (últimas 8, la más reciente al final).
   var thisMonday = gbWeekStart_(today);
@@ -114,7 +150,31 @@ function gbProgressOverview_() {
     miembros: counts,
     atencion: attention.slice(0, 100),
     totalAtencion: attention.length,
+    sinSeguimiento: { cantidad: hidden, dias: trackingDays },
     semanas: weeks.map(function (w) { return { desde: w.desde, visitas: w.visitas, personas: Object.keys(w.personas).length }; }),
     controlAsistencia: !!start
   };
+}
+
+
+/**
+ * Archiva (marca Inactivo) a los miembros que pasaron más de "seguimiento_dias" sin actividad.
+ * No borra nada: si vuelven y pagan, el sistema los reactiva solo. Solo Admin.
+ */
+function gbArchiveStale_() {
+  var limit = gbConfigNumber_('seguimiento_dias', 0);
+  if (!(limit > 0)) return { ok: false, message: 'Primero indica los días de seguimiento en Ajustes.' };
+  return gbWithLock_(function () {
+    var todayDate = gbParseDate_(gbToday_());
+    var lastPay = gbLastPaymentMap_(), lastAtt = gbLastAttendanceMap_(), lastMeas = gbLastMeasurementMap_();
+    var changed = 0;
+    gbList_('members', function (m) { return m.Estado === 'Activo'; }).forEach(function (m) {
+      if (gbIsStale_(gbDaysSinceActivity_(m, lastPay, lastAtt, lastMeas, todayDate), limit)) {
+        gbUpdate_('members', m.MemberID, { Estado: 'Inactivo' });
+        changed++;
+      }
+    });
+    log_('miembros', 'INFO', 'Archivados por ' + limit + ' días sin actividad: ' + changed);
+    return { ok: true, cambiados: changed, dias: limit };
+  });
 }

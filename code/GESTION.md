@@ -117,6 +117,11 @@ y ≥ N días sin asistir, **solo si el control de asistencia ya está en uso**)
 - **Búsqueda de miembros:** filtra mientras escribes usando la lista en memoria (sin tildes ni mayúsculas, sin llamar al servidor). El entrenador no tiene el DPI completo en su lista: si escribe uno completo, el servidor lo busca. Mismo buscador en Miembros y Asistencia; Enter abre el primer resultado.
 - **Botones:** el botón o la fila que tocas muestra un indicador mientras llegan los datos (abrir plantillas, fichas, listas…).
 - **Guardar en el teléfono:** en las pestañas del sitio, «Guardar cambios» aparece como barra fija abajo mientras haya cambios sin guardar. Los formularios (ventanas) mantienen sus botones fijos al pie.
+- **Seguimiento (Ajustes → «Días sin actividad para dejar de dar seguimiento»):** con un valor mayor que 0 (por ejemplo 60), quien lleva
+  más de esos días sin pagar, venir ni medirse deja de aparecer en «Necesitan atención» y no recibe mensajes del proceso diario. Si nunca
+  hizo nada, se cuenta desde su registro. En Progreso aparece un aviso con el botón **Archivar como inactivos** (solo Admin); no borra
+  nada y el miembro se reactiva solo al registrarle un pago. Con 0 (valor inicial) no se oculta a nadie.
+- **Orden en Progreso:** primero los que están al día, luego por vencer, en gracia, vencidos y al final sin pagos.
 - **DPI:** obligatorio desde los 18 años; opcional para menores (la fecha de nacimiento decide). Si se escribe, debe tener 13 dígitos y no repetirse. Al cumplir 18, la próxima vez que se edite se pide el DPI.
 - **Carnet:** el aviso de Wallet de Apple solo aparece en iPhone; el botón de Google Wallet solo si está configurado.
 

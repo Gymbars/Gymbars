@@ -234,6 +234,7 @@ function gbConfigSeed_() {
     ['recordatorio_dias_antes', '3'],
     ['inactividad_dias', '10'],
     ['medidas_dias', '30'],
+    ['seguimiento_dias', '0'],
     ['ventana_scan_minutos', '240'],
     ['hora_diaria', '7'],
     ['email_activo', 'SI'],
