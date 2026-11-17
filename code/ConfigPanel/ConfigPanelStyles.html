@@ -2495,6 +2495,9 @@
   .cp-gb-search-clear:hover { background: var(--cp-line); }
 
   /* El botón (o fila) que se tocó muestra que está trabajando hasta que llegan los datos. */
+  /* Menú desactivado mientras el panel carga por primera vez. */
+  .cp-nav.is-booting .cp-nav-item { opacity: 0.45; pointer-events: none; cursor: progress; }
+
   .cp-btn.is-loading { pointer-events: none; opacity: 0.85; }
   .cp-btn.is-loading::after {
     content: ''; flex: 0 0 auto; width: 14px; height: 14px; margin-left: 8px;

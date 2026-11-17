@@ -239,6 +239,21 @@ try {
       assert.equal(await b.count('#pane-miembros .cp-gb-search-icon'), 1, 'icono de búsqueda en Miembros');
       log('Lista cargada con un servidor lento');
 
+      // --- Carga inicial: el menú se desactiva y elegir otra pestaña a medias no se pierde
+      await b.goto(`${BASE}/?tab=progreso`);
+      await b.waitFor('document.getElementById("cp-nav").classList.contains("is-booting")', 20000);
+      assert.equal(await b.evaluate(`getComputedStyle(document.querySelector('.cp-nav-item')).pointerEvents`), 'none', 'menú desactivado al cargar');
+      await b.evaluate(`document.querySelector('[data-tab="miembros"]').click()`);    // un clic que se cuela igual se ignora
+      await b.waitFor('!document.getElementById("cp-nav").classList.contains("is-booting")', 20000);
+      await sleep(300);
+      assert.equal(await b.evaluate('CP.tab'), 'progreso', 'la pestaña inicial no se pisa a medias');
+      await b.click('[data-tab="miembros"]');
+      await b.waitFor('#gb-m-list .cp-gb-row', 20000);
+      assert.equal(await b.evaluate('CP.tab'), 'miembros', 'ya con el menú activo se puede cambiar');
+      log('Carga inicial: menú desactivado hasta terminar; después cambia de pestaña sin problema');
+      await b.goto(`${BASE}/?tab=miembros`);
+      await b.waitFor('#gb-m-list .cp-gb-row', 20000);
+
       // --- Lectura: barra de carga arriba (por encima de las ventanas) y esqueleto, sin textos «Cargando…»
       await b.evaluate(`document.querySelector('#gb-m-list .cp-gb-row').click()`);
       await sleep(350);
