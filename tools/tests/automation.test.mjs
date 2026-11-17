@@ -684,10 +684,11 @@ test('progreso: ordena por urgencia, cuenta estados y no incluye dinero ni inact
 
   const o = h.plain(h.coach('progress.overview'));
   assert.equal(o.ok, true);
-  assert.deepEqual(o.atencion.map(a => a.memberId), [vencido.MemberID, sinPagos.MemberID, porVencer.MemberID, medidas.MemberID]);
-  assert.equal(o.atencion[0].motivos[0].code, 'pago_vencido');
-  assert.match(o.atencion[0].motivos[0].texto, /vencida hace 10 días/);
-  assert.equal(o.atencion[3].motivos[0].code, 'medidas');
+  // Primero los que están al día (aquí solo por medidas), luego por vencer, vencidos y al final sin pagos
+  assert.deepEqual(o.atencion.map(a => a.memberId), [medidas.MemberID, porVencer.MemberID, vencido.MemberID, sinPagos.MemberID]);
+  assert.equal(o.atencion[0].motivos[0].code, 'medidas');
+  assert.equal(o.atencion[2].motivos[0].code, 'pago_vencido');
+  assert.match(o.atencion[2].motivos[0].texto, /vencida hace 10 días/);
   assert.equal(o.totalAtencion, 4);
   assert.deepEqual(o.miembros, { activos: 5, inactivos: 1, suspendidos: 0,
     pago: { al_dia: 2, por_vencer: 1, gracia: 0, vencido: 1, sin_pagos: 1 } });
@@ -906,4 +907,76 @@ test('inicio de sesión: producción no envía "callback" a la app de acceso; la
   const block = src.slice(src.indexOf("adminTemplate.authCallbackUrl = '';"), src.indexOf("var siteTitle"));
   assert.match(block, /if \(gbEnvironment_\(\) === 'staging'\)/);
   assert.ok(block.indexOf("authCallbackUrl = '';") < block.indexOf('getUrl()'), 'por defecto vacío; solo en pruebas se calcula');
+});
+
+
+test('progreso: dentro de cada estado va primero lo más urgente y luego por nombre', () => {
+  const h = env();
+  const a = memberDue(h, -5), b = memberDue(h, -30), c = memberDue(h, 20), d = memberDue(h, 20);
+  [c, d].forEach(m => h.ctx.gbAppend_('measurements', { MemberID: m.MemberID, Fecha: addDays(today(), -45), PesoLb: 160 }));
+  const o = h.plain(h.admin('progress.overview'));
+  const order = o.atencion.map(x => x.pago.code);
+  assert.deepEqual(order, ['al_dia', 'al_dia', 'vencido', 'vencido'], 'los al día encabezan la lista');
+  assert.deepEqual(o.atencion.slice(0, 2).map(x => x.nombre), [c, d].map(m => h.ctx.gbFullName_(m)).sort((x, y) => x.localeCompare(y, 'es')));
+  void a; void b;
+});
+
+test('seguimiento: tras N días sin actividad el miembro sale de la lista, no recibe mensajes y se puede archivar', () => {
+  const h = env();
+  const activo = memberDue(h, -10);                                        // pagó hace poco: sigue
+  const dormido = h.addMember();                                           // último pago hace 100 días
+  h.addPayment(dormido.MemberID, ymd(addDays(today(), -100)));
+  const conVisita = h.addMember();                                         // pagó hace 100 días pero vino ayer
+  h.addPayment(conVisita.MemberID, ymd(addDays(today(), -100)));
+  h.ctx.gbAppend_('attendance', { MemberID: conVisita.MemberID, FechaHora: addDays(today(), -1), Fecha: addDays(today(), -1), Origen: 'Manual' });
+  const soloMedidas = h.addMember();                                       // sin pagos, medidas hace 80 días
+  h.ctx.gbAppend_('measurements', { MemberID: soloMedidas.MemberID, Fecha: addDays(today(), -80), PesoLb: 150 });
+
+  // Apagado (0): todos aparecen y no hay nada oculto
+  let o = h.plain(h.admin('progress.overview'));
+  assert.equal(o.sinSeguimiento.cantidad, 0);
+  assert.ok(o.atencion.some(x => x.memberId === dormido.MemberID));
+
+  h.setConfig('seguimiento_dias', '60');
+  o = h.plain(h.admin('progress.overview'));
+  const ids = o.atencion.map(x => x.memberId);
+  assert.ok(ids.includes(activo.MemberID));
+  assert.ok(ids.includes(conVisita.MemberID), 'una visita reciente cuenta como actividad');
+  assert.ok(!ids.includes(dormido.MemberID), 'sin actividad hace 100 días: oculto');
+  assert.ok(!ids.includes(soloMedidas.MemberID), 'medidas hace 80 días: oculto');
+  assert.deepEqual(o.sinSeguimiento, { cantidad: 2, dias: 60 });
+  assert.equal(o.miembros.activos, 4, 'siguen contando como activos hasta archivarlos');
+
+  // El proceso diario tampoco les escribe
+  const plan = h.plain(h.ctx.gbDailyPlan_(ymd(today())));
+  assert.ok(!plan.some(p => [dormido.MemberID, soloMedidas.MemberID].includes(p.memberId)));
+  assert.ok(plan.some(p => p.memberId === activo.MemberID));
+
+  // El entrenador no puede archivar; el Admin sí, y queda reversible
+  assert.throws(() => h.coach('progress.archiveStale'), /PERM/);
+  const r = h.plain(h.admin('progress.archiveStale'));
+  assert.deepEqual([r.ok, r.cambiados], [true, 2]);
+  const after = h.plain(h.admin('progress.overview'));
+  assert.equal(after.miembros.inactivos, 2);
+  assert.equal(after.sinSeguimiento.cantidad, 0);
+  assert.equal(h.ctx.gbFind_('members', 'MemberID', dormido.MemberID).Estado, 'Inactivo');
+  assert.equal(h.plain(h.admin('payments.register', { memberId: dormido.MemberID, monto: 150, fecha: ymd(today()) })).reactivated, true, 'al pagar vuelve a estar activo');
+});
+
+test('seguimiento: apagado no archiva nada, un miembro nuevo sin movimientos cuenta desde su registro y el valor se valida', () => {
+  const h = env();
+  const viejo = h.addMember({ FechaRegistro: addDays(today(), -200) });    // nunca hizo nada, se registró hace 200 días
+  const nuevo = h.addMember({ FechaRegistro: addDays(today(), -5) });
+  const off = h.plain(h.admin('progress.archiveStale'));
+  assert.equal(off.ok, false);
+  assert.match(off.message, /seguimiento/i);
+
+  h.setConfig('seguimiento_dias', '60');
+  const o = h.plain(h.admin('progress.overview'));
+  assert.ok(!o.atencion.some(x => x.memberId === viejo.MemberID));
+  assert.ok(o.atencion.some(x => x.memberId === nuevo.MemberID), 'registrado hace 5 días: se le sigue dando seguimiento');
+
+  assert.equal(h.plain(h.admin('config.get')).reglas.seguimiento_dias.max, 730);
+  assert.throws(() => h.admin('config.set', 'seguimiento_dias', '99999'), /no válido/);
+  assert.equal(h.plain(h.admin('config.set', 'seguimiento_dias', '45')).ok, true);
 });

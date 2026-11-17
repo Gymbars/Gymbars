@@ -52,6 +52,23 @@ try {
     log('Progreso carga con cifras');
     await b.shot(join(OUT, '01-progreso.png'));
     assert.ok((await b.count('#gb-progress [data-open]')) > 3, 'lista de atención');
+    // La lista empieza por los que están al día y termina con los de peor estado
+    const rank = { al_dia: 0, por_vencer: 1, gracia: 2, vencido: 3, sin_pagos: 4 };
+    const list = (await adminApi('progress.overview')).atencion.map(a => rank[a.pago.code]);
+    assert.deepEqual(list, [...list].sort((x, y) => x - y), 'orden: al día primero');
+    // Días de seguimiento: los miembros sin actividad se ocultan y se ofrece archivarlos
+    await adminApi('config.set', 'seguimiento_dias', '7');
+    await b.goto(`${BASE}/?tab=progreso`);
+    await b.waitFor('#gb-p-archive', 20000);
+    assert.match(await b.text('#gb-progress .cp-gb-note'), /sin actividad/);
+    await b.click('#gb-p-archive');
+    await b.waitFor('.cp-gb-modal [data-act], .cp-gb-modal-foot .cp-btn--primary');
+    assert.match(await b.text('.cp-gb-modal'), /Inactivo/);
+    await b.evaluate(`document.querySelectorAll('.cp-gb-modal').forEach(function(m){ m.remove(); }); GB.modals.length = 0;`);
+    await adminApi('config.set', 'seguimiento_dias', '0');
+    log('Progreso: al día primero; con días de seguimiento aparece el aviso y la opción de archivar');
+    await b.goto(`${BASE}/?tab=progreso`);
+    await b.waitFor('#gb-progress .cp-gb-stat');
     assert.ok(await b.count('.cp-gb-count') >= 1, 'contador de mensajes pendientes en el menú');
 
     await b.click('[data-tab="miembros"]');

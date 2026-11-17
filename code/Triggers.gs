@@ -44,12 +44,9 @@ function gbDailyPlan_(today) {
 
   var members = gbList_('members', function (m) { return m.Estado === 'Activo'; });
   var lastPay = gbLastPaymentMap_();
-  var lastAtt = start ? gbLastAttendanceMap_() : {};
-  var lastMeas = {};
-  gbList_('measurements').forEach(function (x) {
-    var d = gbParseDate_(x.Fecha);
-    if (d && (!lastMeas[x.MemberID] || d > lastMeas[x.MemberID])) lastMeas[x.MemberID] = d;
-  });
+  var trackingDays = gbConfigNumber_('seguimiento_dias', 0);
+  var lastAtt = (start || trackingDays > 0) ? gbLastAttendanceMap_() : {};
+  var lastMeas = gbLastMeasurementMap_();
   var lastInactivityMsg = {};
   gbList_('messages', function (m) { return m.Tipo === 'inactividad' && m.Estado !== 'Descartado'; }).forEach(function (m) {
     var d = gbParseDate_(m.CreadoEn);
@@ -58,6 +55,8 @@ function gbDailyPlan_(today) {
 
   var plan = [];
   members.forEach(function (m) {
+    // Sin actividad desde hace más de "seguimiento_dias": no se les envía nada (ya no se les da seguimiento).
+    if (gbIsStale_(gbDaysSinceActivity_(m, lastPay, lastAtt, lastMeas, todayDate), trackingDays)) return;
     var status = gbPaymentStatus_(m, lastPay[m.MemberID], today, options);
     var name = gbFullName_(m);
 
@@ -284,6 +283,7 @@ function gbConfigRules_() {
     recordatorio_dias_antes: { type: 'int', min: 0, max: 15, label: 'Avisar de la mensualidad con X días de anticipación' },
     inactividad_dias: { type: 'int', min: 3, max: 90, label: 'Días sin asistir para avisar' },
     medidas_dias: { type: 'int', min: 7, max: 120, label: 'Días entre medidas' },
+    seguimiento_dias: { type: 'int', min: 0, max: 730, label: 'Días sin actividad para dejar de dar seguimiento (0 = nunca)' },
     ventana_scan_minutos: { type: 'int', min: 5, max: 1440, label: 'Minutos para ignorar un segundo escaneo' },
     hora_diaria: { type: 'int', min: 0, max: 23, label: 'Hora del proceso diario' },
     email_activo: { type: 'flag', label: 'Enviar correos automáticamente' },
