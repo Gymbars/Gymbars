@@ -403,6 +403,19 @@
       else cpSwitchTab(start, true);
     }
 
+    /**
+     * Mientras el panel carga por primera vez el menú queda desactivado: si se cambiara de pestaña a medias,
+     * al terminar la carga volvería a la pestaña inicial en lugar de quedarse en la elegida.
+     */
+    function cpSetBooting(on) {
+      CP.booting = !!on;
+      var nav = document.getElementById('cp-nav');
+      if (nav) nav.classList.toggle('is-booting', !!on);
+      Array.prototype.forEach.call(document.querySelectorAll('.cp-nav-item'), function (b) {
+        if (on) b.setAttribute('aria-disabled', 'true'); else b.removeAttribute('aria-disabled');
+      });
+    }
+
     /** Oculta lo que el rol no puede usar (el servidor lo vuelve a verificar en cada llamada). */
     function cpApplyRole() {
       var isAdmin = CP.role === 'Admin';
@@ -541,19 +554,23 @@
     }
 
     function cpLoadData() {
+      cpSetBooting(true);
       cpBusy(true);
       google.script.run
         .withSuccessHandler(function (data) {
           cpBusy(false);
           try {
             cpApplyData(data);
+            cpSetBooting(false);
             cpSwitchTab(CP_START_TAB || 'sitio', true);
           } catch (err) {
+            cpSetBooting(false);
             cpFatal(err);
           }
         })
         .withFailureHandler(function (err) {
           cpBusy(false);
+          cpSetBooting(false);
           if (cpHandleAuthError(err && err.message)) return;
           cpFatal(err);
         })
@@ -662,7 +679,7 @@
     function cpBindGlobalEvents() {
       document.getElementById('cp-nav').addEventListener('click', function (event) {
         var button = event.target.closest('.cp-nav-item');
-        if (!button) return;
+        if (!button || CP.booting) return;
         cpSwitchTab(button.getAttribute('data-tab'));
       });
 

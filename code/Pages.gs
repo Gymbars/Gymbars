@@ -310,3 +310,34 @@ function gbCameraTestPage_() {
     '});});})();</script>';
   return gbPage_('Prueba de cámara', body);
 }
+
+
+/**
+ * Estado de la instalación: ¿existen todas las pestañas del sistema? Solo devuelve nombres de pestañas
+ * (no datos). El despliegue lo consulta para avisar "falta preparar la hoja" en vez de fallar por dentro.
+ */
+function gbHealth_() {
+  var schema = gbSchema_(), missing = [];
+  Object.keys(schema).forEach(function (k) {
+    if (!ss_().getSheetByName(schema[k].name)) missing.push(schema[k].name);
+  });
+  return { ok: missing.length === 0, entorno: gbEnvironment_(), faltan: missing };
+}
+
+/**
+ * Rutas públicas por enlace. Cada página valida su propio token o firma. Si algo falla por dentro,
+ * la persona ve "enlace no válido" (nunca el detalle del error) y queda anotado en la bitácora.
+ * @return {HtmlOutput|null} null si la solicitud no es de ninguna de estas páginas.
+ */
+function gbPublicRoute_(e) {
+  var p = e && e.parameter;
+  if (!p || !(p.comprobante || p.reporte || p.carnet)) return null;
+  try {
+    if (p.comprobante) return gbVoucherPage_(p.comprobante);
+    if (p.reporte) return gbReportPage_(p.reporte, p.m, p.r, p.s);
+    return gbCarnetPage_(p.carnet);
+  } catch (err) {
+    try { log_('paginas', 'ERROR', String(err && err.message || err).substring(0, 200)); } catch (_) {}
+    return gbInvalidLinkPage_();
+  }
+}

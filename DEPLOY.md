@@ -97,6 +97,11 @@ Los enlaces de carnet, comprobante y reporte salen entonces como `https://app.tu
 2. Sigue el orden de `code/GESTION.md` («Primer arranque»): propiedades del script (`GB_REPORT_BASE_URL`, secreto de inicio
    de sesión), pestaña `Usuarios`, migración, tablet.
 3. Tras el **primer** despliegue con permisos nuevos hay que **autorizarlos a mano** en el editor, igual que en pruebas.
+   **Prepara la hoja de producción antes de publicar**: el código nuevo necesita pestañas nuevas (`Miembros`, `Pagos`,
+   `Dispositivos`…). `deploy:prod` sube el código al editor aunque luego se revierta, así que: abre la hoja de producción,
+   recarga, menú *Gymbars → Crear pestañas faltantes* (primero ejecuta `onOpen` en el editor para autorizar), y vuelve a
+   correr `pnpm deploy:prod`. Si falta algo, el despliegue lo dice («La hoja tiene todas las pestañas del sistema — faltan: …»),
+   vuelve solo a la versión anterior y comprueba que el panel siga respondiendo.
 4. Rota el secreto de inicio de sesión (ver `code/GESTION.md`, «Seguridad»); es lo que hace que el guardia deje de avisar.
 
 ## Lista de pruebas en staging (a mano, 10 minutos)

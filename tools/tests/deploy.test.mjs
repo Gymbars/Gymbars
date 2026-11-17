@@ -21,6 +21,7 @@ function fakeSite(over = {}) {
     if (init && init.method === 'POST') {
       return respond(over.pingBody || JSON.stringify({ ok: false, status: 'no_autorizado', error: 'Dispositivo no autorizado.' }));
     }
+    if (url.includes('?api=health')) return respond(over.healthBody || JSON.stringify({ ok: true, entorno: 'produccion', faltan: [] }));
     if (url.includes('?api=data')) return respond(over.dataBody || JSON.stringify({ site: { nombre: 'Gymbars', telefono: '4799-3217' }, programs: [] }));
     if (url.includes('?carnet=')) return respond(over.carnetBody || '<h1>Enlace no v\\u00e1lido</h1>');
     if (url.includes('?page=admin')) return respond(over.adminBody || '<div class="cp-app">panel</div>', over.adminStatus || 200);
@@ -113,9 +114,9 @@ test('rama: cada entorno exige su rama', () => {
 
 // ---------------------------------------------------------------- pruebas del sitio publicado
 
-test('smoke: un sitio sano pasa las cuatro comprobaciones', async () => {
+test('smoke: un sitio sano pasa todas las comprobaciones', async () => {
   const checks = await smokeOnce({ url: CONFIG.prod.url, fetch: fakeSite() });
-  assert.equal(checks.length, 5);
+  assert.equal(checks.length, 6);
   assert.deepEqual(names(checks), []);
 });
 
@@ -350,4 +351,27 @@ test('guardia: el código real del repositorio no tiene secretos nuevos', async 
   const read = f => { try { const b = readFileSync(root + f); return b.length > 2_000_000 || b.includes(0) ? null : b.toString('utf8'); } catch (_) { return null; } };
   const { errors } = scanRepository(tracked, read, baseline);
   assert.deepEqual(errors, []);
+});
+
+
+test('smoke: si la hoja no tiene las pestañas nuevas lo dice con claridad y qué hacer', async () => {
+  const sheet = JSON.stringify({ ok: false, entorno: 'produccion', faltan: ['Miembros', 'Dispositivos'] });
+  const checks = await smokeOnce({ url: 'u', fetch: fakeSite({ healthBody: sheet }) });
+  const bad = checks.find(c => !c.ok);
+  assert.equal(bad.name, 'La hoja tiene todas las pestañas del sistema');
+  assert.match(bad.detail, /Miembros, Dispositivos/);
+  assert.match(bad.detail, /Crear pestañas faltantes/);
+  // Código viejo: no entiende la comprobación y devuelve el sitio en HTML
+  const old = await smokeOnce({ url: 'u', fetch: fakeSite({ healthBody: '<html>sitio</html>' }) });
+  assert.equal(old.find(c => !c.ok).name, 'La hoja tiene todas las pestañas del sistema');
+});
+
+test('prod con hoja sin preparar: revierte y, al volver a la versión anterior, solo exige que el panel responda', async () => {
+  const sheet = JSON.stringify({ ok: false, entorno: 'produccion', faltan: ['Miembros'] });
+  const inner = fakeSite({ healthBody: sheet, carnetBody: '<h1>Error</h1>', pingBody: '{"ok":false,"status":"error"}' });
+  const { result, io } = await go('prod', { fetch: inner }, { yes: true });
+  assert.equal(result.ok, false);
+  assert.equal(result.rolledBack, true);
+  assert.equal(result.rollbackHealthy, true, 'el panel responde, así que la versión anterior está sana');
+  assert.ok(io.state.deployedVersion === 7, 'producción quedó en la versión anterior');
 });
