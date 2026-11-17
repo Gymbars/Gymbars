@@ -107,7 +107,12 @@ function doGet(e) {
     adminTemplate.webAppUrl = getWebsiteUrl();
     adminTemplate.isWebApp = true;
     adminTemplate.googleAuthStartUrl = GOOGLE_AUTH_START_URL;
-    try { adminTemplate.authCallbackUrl = ScriptApp.getService().getUrl(); } catch (_) { adminTemplate.authCallbackUrl = ''; }
+    // Solo en pruebas: le dice a la app de inicio de sesión que regrese a la implementación de pruebas.
+    // En producción no se envía: la app ya regresa ahí por defecto (así el flujo es el de siempre).
+    adminTemplate.authCallbackUrl = '';
+    if (gbEnvironment_() === 'staging') {
+      try { adminTemplate.authCallbackUrl = ScriptApp.getService().getUrl(); } catch (_) {}
+    }
 
     var siteTitle = 'Gymbars';
     try {

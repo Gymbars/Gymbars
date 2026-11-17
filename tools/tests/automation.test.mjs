@@ -900,3 +900,10 @@ test('doGet: ?api=health se atiende antes que las páginas y no necesita sesión
   assert.match(src, /api === 'health'\) return json_\(gbHealth_\(\)\)/);
   assert.match(src, /gbPublicRoute_\(e\)/);
 });
+
+test('inicio de sesión: producción no envía "callback" a la app de acceso; las pruebas sí', () => {
+  const src = readFileSync(new URL('../../code/Code.gs', import.meta.url), 'utf8');
+  const block = src.slice(src.indexOf("adminTemplate.authCallbackUrl = '';"), src.indexOf("var siteTitle"));
+  assert.match(block, /if \(gbEnvironment_\(\) === 'staging'\)/);
+  assert.ok(block.indexOf("authCallbackUrl = '';") < block.indexOf('getUrl()'), 'por defecto vacío; solo en pruebas se calcula');
+});
