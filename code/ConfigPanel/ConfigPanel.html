@@ -909,6 +909,9 @@
      * @param {Array} args
      */
     function cpSaveAndReload(fn, args) {
+      // Guardar vuelve a pintar todas las pestañas con los datos nuevos: mientras tanto no se cambia de pestaña
+      // (si no, se perdería lo que se esté editando en otra). Las lecturas normales sí pueden solaparse.
+      cpSetBooting(true);
       cpRun(fn, args, {
         busy: 'Guardando…',
         ok: function (result) {
@@ -917,15 +920,21 @@
             ok: function (data) {
               var scroll = document.getElementById('cp-body').scrollTop;
               cpApplyData(data);
+              cpSetBooting(false);
               cpSwitchTab(CP.tab, true);
               document.getElementById('cp-body').scrollTop = scroll;
               cpToast((result && result.message) || 'Cambios guardados.', result && result.warning ? 'warn' : 'ok');
             },
             fail: function (message) {
+              cpSetBooting(false);
               cpClearDirty(CP.tab);
               cpToast('Se guardó, pero no se pudo recargar: ' + message, 'warn');
             }
           });
+        },
+        fail: function (message) {
+          cpSetBooting(false);
+          cpToast(message, 'error');
         }
       });
     }
